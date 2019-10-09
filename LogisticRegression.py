@@ -1,5 +1,5 @@
 from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LogisticRegression
+from sklearn import linear_model
 import matplotlib.pylab as plt
 import pandas as pd
 import numpy as np
@@ -182,6 +182,12 @@ class LogisticRegression():
                 print("Gradient converged to given precision in {}. epoch and {}. iterations".format(epoch, i))
                 break
 
+        ## Benchmark it against Scikit Learn
+        clf = linear_model.LogisticRegression(solver='lbfgs').fit(self.X_train, self.y_train)
+        print("\nScikit Learn Accuracy on Test Set: {}\n".format(clf.score(self.X_test, self.y_test)))
+
+
+
 # TEST THAT SHIT
 if __name__ == '__main__':
 
@@ -202,6 +208,7 @@ if __name__ == '__main__':
     text = 'Fig. 1 Test accuracies over epochs by Logistic Regression'
     name = 'Logistic Regression'
     plot_accuracies(logistic.test_accuracy, text, name)
+    
     # check for different lambdas
     # lambdas = np.logspace(-4,4,9)
     # for lamda in lambdas:
