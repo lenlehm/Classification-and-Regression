@@ -1,9 +1,25 @@
 from sklearn.model_selection import train_test_split
-from sklearn import linear_model
+from sklearn.linear_model import LogisticRegression
 import matplotlib.pylab as plt
 import pandas as pd
 import numpy as np
 import os
+
+plot_dir = os.path.join(os.getcwd(), 'plots')
+
+def plot_accuracies(accuracies, text, name): 
+    #text = 'Fig. 7 Test Variance across the different lambdas.'
+    fig = plt.figure(figsize=(9,7))
+    # first accuracy after 10th epoch, and in steps of 10.
+    plt.plot( (np.arange(1, len(accuracies) + 1) * 10), accuracies, label=name)
+    #plt.plot(poly_degree, variance_test, label='Test Variance')
+    plt.title( name + "Accuracy")
+    plt.ylabel("Accuracy Score")
+    plt.xlabel("Number of epochs")
+    plt.legend()
+    fig.text(0.1, 0, text)
+    plt.savefig(plot_dir + name + '.png', transparent=True, bbox_inches='tight')
+    plt.show()
 
 def get_data(pathToFile, standardized=True, normalized=False):
     """
@@ -71,7 +87,9 @@ class LogisticRegression():
         # Initialize parameter beta
         self.beta    = np.random.uniform(-0.5,0.5, self.X_train.shape[1])
         self.beta /= np.linalg.norm(self.beta)
-        #self.beta = np.random.uniform(-0.5, 0.5, (self.X_train.shape[1], 1))
+
+        self.train_accuracy = []
+        self.test_accuracy = []    
 
 
     def optimize(self, batch_size=64, epochs=128, eta='schedule', regularization=None, lamda=0.0, threshold=0.0001):
@@ -97,14 +115,8 @@ class LogisticRegression():
         ----------
         Nothing - results and parameters stored in the member variables
         """
-
-        X_train = self.X_train 
-        X_test = self.X_test
-        y_train = self.y_train 
-        y_test = self.y_test
-
-        self.batchSize = batch_size #int(X_train.shape[0] // m)
-        iterPerEpoch = X_train.shape[0] // batch_size
+        self.batchSize = batch_size
+        iterPerEpoch = self.X_train.shape[0] // self.batchSize
 
         if eta == 'schedule':
             t0 = 5 ; t1 = 50
@@ -124,12 +136,11 @@ class LogisticRegression():
 
         #Stochastic Gradient Descent (SGD)
         for epoch in range(epochs + 1):
+
             # Shuffle training data
-            # randomize = np.arange(X_train.shape[0])
-            # X_train.set_index(pd.Series(np.arange(X_train.shape[0])), inplace=True)
-            # np.random.shuffle(randomize)
-            # X_train = X_train[randomize]
-            # y_train = y_train[randomize]
+            #self.X_train.set_index(np.arange(self.X_train.shape[0]), inplace=True)
+            X_train = self.X_train.iloc[ np.random.permutation(self.X_train.shape[0]) ]
+            y_train = self.y_train.iloc[ np.random.permutation(self.y_train.shape[0]) ]
 
             for i in range(iterPerEpoch):
                 # create the batches
@@ -154,16 +165,16 @@ class LogisticRegression():
                 # accuracy score
                 self.train_accuracy.append( np.sum((self.p_train > 0.5) == y_train)/X_train.shape[0] )
 
-                logit_test = np.dot(X_test, self.beta)
+                logit_test = np.dot(self.X_test, self.beta)
                 # binary cross entropy on test data
-                self.test_cost = 0.5*(-np.sum((y_test * logit_test) - np.log(1 + np.exp(logit_test))))/X_test.shape[0] + reg_cost(self.beta)
+                self.test_cost = 0.5*(-np.sum((self.y_test * logit_test) - np.log(1 + np.exp(logit_test)))) / self.X_test.shape[0] + reg_cost(self.beta)
                 self.p_test = 1/(1 + np.exp(-logit_test))
                 # test accuracy score
-                self.test_accuracy.append( np.sum((self.p_test > 0.5) == y_test) / X_test.shape[0] )
+                self.test_accuracy.append( np.sum((self.p_test > 0.5) == self.y_test) / self.X_test.shape[0] )
 
                 print("Epoch: {} out of {} epochs".format(epoch, epochs))
                 print("Cost during Training: {}, Test: {}".format(self.train_cost, self.test_cost))
-                print("Accuracy in Training: {}, Test: {}".format(self.train_accuracy[i], self.test_accuracy[i]))
+                print("Accuracy in Training: {}, Test: {}".format(self.train_accuracy[-1], self.test_accuracy[-1]))
                 print("--------------------------------------------------------------")
 
             # stopping criterion
@@ -173,16 +184,24 @@ class LogisticRegression():
 
 # TEST THAT SHIT
 if __name__ == '__main__':
+
+## NOTE: running over 1000 epochs showed, that there is neither a benefit in cost nor in accuracy.
+## so the following will only focus on 150 epochs
+    epochs = 50#150
+    batches = 64
+    
     # read the dataset
-    batch = 64
     cwd = os.getcwd()
     filename = "\\default of credit card clients.xls"
     filePath = cwd + filename
     X, y = get_data(filePath, standardized=False, normalized=False)
     logistic = LogisticRegression(X, y)
 
-    logistic.optimize(batch_size=batch, regularization='l2', epochs=1000, lamda=10)
-
+    logistic.optimize(batch_size=batches, regularization='l2', epochs=epochs, lamda=10)
+    print("\n *******   ****** ******** \n")
+    text = 'Fig. 1 Test accuracies over epochs by Logistic Regression'
+    name = 'Logistic Regression'
+    plot_accuracies(logistic.test_accuracy, text, name)
     # check for different lambdas
     # lambdas = np.logspace(-4,4,9)
     # for lamda in lambdas:
