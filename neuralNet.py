@@ -32,9 +32,9 @@ class NeuralNet():
             regularization strength
         param: lamb: strength of regularization
         """
-        self.xData = X
-        self.yData = y
-        self.N = X.shape[0]
+        self.xData = xData
+        self.yData = yData
+        self.N = xData.shape[0]
         self.cost_func = cost_function
         self.regularization = regularization
         self.lamda = lamda
@@ -211,28 +211,6 @@ class NeuralNet():
         return cost
 
 
-    # def cost_function_derivative(self, y, ypred):
-    #     """
-    #     Takes the derivative of the selected cost function - same setup as with the activations
-    #     INPUT: 
-    #     ---------
-    #     y: numpy ndarray
-    #         correct labels
-    #     ypred: numpy ndarray
-    #         predicted targets
-
-    #     OUTPUT:
-    #     ---------
-    #     returns the calculated derivative of the costfunction
-    #     """
-
-    #     if self.cost_func == 'mse':
-    #         return -1.0 / y.shape[0] * (y - ypred.flatten())
-
-    #     elif self.cost_func == 'cross_entropy':
-    #         ypred[ np.arange(ypred.shape[0]), y.flatten() ] -= 1
-    #         return 1.0 / y.shape[0] * ypred
-
     def accuracy(self, y, ypred):
         """
         calculates the accuracy = number of correctly classified classes
@@ -378,16 +356,16 @@ class NeuralNet():
                 if self.cost_func == 'cross_entropy':
                     trainAcc = self.accuracy(self.yTrain, ypred_train)
                     testAcc = self.accuracy(self.yTest, ypred_test)
-                    print("[ACCURACY]: {} epoch from {}: Training Acc:  {}, Test Acc  {}".format(epoch, epochs+1, trainAcc, testAcc))
+                    print("[ACCURACY]: {} epoch from {}: Training Acc:  {}, Test Acc  {}".format(epoch, epochs, trainAcc, testAcc))
                     self.convergence_rate['Epoch'].append(epoch)
                     self.convergence_rate['Test Accuracy'].append(testAcc)
 
 ## TESTING MY BABY 
 if __name__ == '__main__':
     # read the dataset
-    cwd = os.getcwd()
-    filename = "\\default of credit card clients.xls"
-    filePath = cwd + filename
+    cwd = os.path.join(os.getcwd(), "data")
+    filename = "default of credit card clients.xls"
+    filePath = os.path.join(cwd, filename)
     X, y = get_data(filePath, standardized=False, normalized=False)
     # note that the activation functions need to be 1 smaller than the node length
     activation_functions    = ['relu', 'relu', 'relu', 'relu', None]

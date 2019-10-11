@@ -87,7 +87,7 @@ def get_data(pathToFile, standardized=True, normalized=False):
 ## Logistic Regression Class Implementation with Stochastic Gradient Descent
 class LogisticRegression():
     def __init__(self, X, y, test_size=0.2):
-        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(X, y, test_size=test_size)
+        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(X, y, test_size=test_size, random_state=2912)
         # Initialize parameter beta
         self.beta    = np.random.uniform(-0.5,0.5, self.X_train.shape[1])
         self.beta /= np.linalg.norm(self.beta)
@@ -96,7 +96,7 @@ class LogisticRegression():
         self.test_accuracy = []    
 
 
-    def optimize(self, batch_size=64, epochs=128, eta='schedule', regularization=None, lamda=0.0, threshold=0.0001):
+    def optimize(self, batch_size=64, epochs=128, eta='schedule', regularization=None, lamda=0.0, threshold=0.0001, plot_training=False):
         """
         This method performs stochastic gradient descent to optimize its parameters
 
@@ -114,6 +114,8 @@ class LogisticRegression():
             regularization strength of the regularization method
         threshold: float
             threshold when we should stop optimizing, since there was no big difference
+        plot_training: boolean  
+            indicator of whether to plot the cost and accuracy per epoch
         
         OUTPUT:
         ----------
@@ -176,10 +178,11 @@ class LogisticRegression():
                 # test accuracy score
                 self.test_accuracy.append( np.sum((self.p_test > 0.5) == self.y_test) / self.X_test.shape[0] )
 
-                print("Epoch: {} out of {} epochs".format(epoch, epochs))
-                print("Cost during Training: {}, Test: {}".format(self.train_cost, self.test_cost))
-                print("Accuracy in Training: {}, Test: {}".format(self.train_accuracy[-1], self.test_accuracy[-1]))
-                print("--------------------------------------------------------------")
+                if plot_training:
+                    print("Epoch: {} out of {} epochs".format(epoch, epochs))
+                    print("Cost during Training: {}, Test: {}".format(self.train_cost, self.test_cost))
+                    print("Accuracy in Training: {}, Test: {}".format(self.train_accuracy[-1], self.test_accuracy[-1]))
+                    print("--------------------------------------------------------------")
 
             # stopping criterion
             if(np.linalg.norm(gradient) < threshold):
@@ -188,8 +191,8 @@ class LogisticRegression():
 
         ## Benchmark it against Scikit Learn
         clf = linear_model.LogisticRegression(solver='lbfgs').fit(self.X_train, self.y_train)
-        print("\nScikit Learn Accuracy on Test Set: {}\n".format(clf.score(self.X_test, self.y_test)))
-
+        print("Scikit Accuracy on Test Set: {}".format(clf.score(self.X_test, self.y_test)))
+        print("My     Accuracy on Test Set: {}".format(self.train_accuracy[-1], self.test_accuracy[-1]))
 
 
 # TEST THAT SHIT
@@ -197,7 +200,7 @@ if __name__ == '__main__':
 
 ## NOTE: running over 1000 epochs showed, that there is neither a benefit in cost nor in accuracy.
 ## so the following will only focus on 150 epochs
-    epochs = 50#150
+    epochs = 50 #150
     batches = 64
     
     # read the dataset
@@ -205,13 +208,13 @@ if __name__ == '__main__':
     filename = "\\default of credit card clients.xls"
     filePath = cwd + filename
     X, y = get_data(filePath, standardized=False, normalized=False)
-    logistic = LogisticRegression(X, y)
-
+    logistic = LogisticRegression(X, y, test_size=0.2)
     logistic.optimize(batch_size=batches, regularization='l2', epochs=epochs, lamda=10)
-    print("\n *******   ****** ******** \n")
-    text = 'Fig. 1 Test accuracies over epochs by Logistic Regression'
-    name = 'Logistic Regression'
-    plot_accuracies(logistic.test_accuracy, text, name)
+
+    # print("\n *******   ****** ******** \n")
+    # text = 'Fig. 1 Test accuracies over epochs by Logistic Regression'
+    # name = 'Logistic Regression'
+    # plot_accuracies(logistic.test_accuracy, text, name)
     
     # check for different lambdas
     # lambdas = np.logspace(-4,4,9)
