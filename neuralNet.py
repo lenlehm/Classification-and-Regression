@@ -356,7 +356,7 @@ class NeuralNet():
                 if self.cost_func == 'cross_entropy':
                     trainAcc = self.accuracy(self.yTrain, ypred_train)
                     testAcc = self.accuracy(self.yTest, ypred_test)
-                    print("[ACCURACY]: {} epoch from {}: Training Acc:  {}, Test Acc  {}".format(epoch, epochs, trainAcc, testAcc))
+                    #print("[ACCURACY]: {} epoch from {}: Training Acc:  {}, Test Acc  {}".format(epoch, epochs, trainAcc, testAcc))
                     self.convergence_rate['Epoch'].append(epoch)
                     self.convergence_rate['Test Accuracy'].append(testAcc)
 
