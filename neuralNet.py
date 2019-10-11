@@ -3,6 +3,7 @@ import numpy as np
 import sys
 import os
 from LogisticRegression import get_data
+from sklearn.neural_network import MLPClassifier # benchmarking
 
 class NeuralNet():
 
@@ -188,7 +189,7 @@ class NeuralNet():
         """
 
         if self.cost_func == 'mse':
-            deriv = (y - ypred.flatten())
+            deriv = ypred.flatten() - y
             norm = ( (y.reshape(-1, 1) - ypred)**2 ).mean() * 0.5
             return deriv if derivative else norm
 
@@ -210,27 +211,27 @@ class NeuralNet():
         return cost
 
 
-    def cost_function_derivative(self, y, ypred):
-        """
-        Takes the derivative of the selected cost function - same setup as with the activations
-        INPUT: 
-        ---------
-        y: numpy ndarray
-            correct labels
-        ypred: numpy ndarray
-            predicted targets
+    # def cost_function_derivative(self, y, ypred):
+    #     """
+    #     Takes the derivative of the selected cost function - same setup as with the activations
+    #     INPUT: 
+    #     ---------
+    #     y: numpy ndarray
+    #         correct labels
+    #     ypred: numpy ndarray
+    #         predicted targets
 
-        OUTPUT:
-        ---------
-        returns the calculated derivative of the costfunction
-        """
+    #     OUTPUT:
+    #     ---------
+    #     returns the calculated derivative of the costfunction
+    #     """
 
-        if self.cost_func == 'mse':
-            return -1.0 / y.shape[0] * (y - ypred.flatten())
+    #     if self.cost_func == 'mse':
+    #         return -1.0 / y.shape[0] * (y - ypred.flatten())
 
-        elif self.cost_func == 'cross_entropy':
-            ypred[ np.arange(ypred.shape[0]), y.flatten() ] -= 1
-            return 1.0 / y.shape[0] * ypred
+    #     elif self.cost_func == 'cross_entropy':
+    #         ypred[ np.arange(ypred.shape[0]), y.flatten() ] -= 1
+    #         return 1.0 / y.shape[0] * ypred
 
     def accuracy(self, y, ypred):
         """
@@ -372,8 +373,7 @@ class NeuralNet():
                 ypred_test  = self.feed_forward(self.xTest, isTraining=False)
                 trainError  = self.cost_function(self.yTrain, ypred_train)
                 testError   = self.cost_function(self.yTest, ypred_test)
-                print(testError)
-                print("[ERROR]: {} epoch from {}: Training Error:  {}, Test Error  {}".format(epoch, epochs+1, trainError, testError))
+                #print("[ERROR]: {} epoch from {}: Training Error:  {}, Test Error  {}".format(epoch, epochs+1, trainError, testError))
 
                 if self.cost_func == 'cross_entropy':
                     trainAcc = self.accuracy(self.yTrain, ypred_train)
@@ -390,12 +390,15 @@ if __name__ == '__main__':
     filePath = cwd + filename
     X, y = get_data(filePath, standardized=False, normalized=False)
     # note that the activation functions need to be 1 smaller than the node length
-    activation_functions    = ['relu', 'relu', None]
-    neural_setup            = [23, 128, 64, 1] # first needs to be 23 and last needs to be 1
-    neuralNet = NeuralNet(X, y, nodes=neural_setup, activations=activation_functions)
+    activation_functions    = ['relu', 'relu', 'relu', 'relu', None]
+    neural_setup            = [23, 128, 64, 32, 32, 1] # first needs to be 23 and last needs to be 1
+    neuralNet = NeuralNet(X, y, nodes=neural_setup, activations=activation_functions, cost_function='cross_entropy')
     neuralNet.split_data(test_size=0.2)
-    neuralNet.trainingNetwork(epochs=250, batchSize=100, tau=0.01)
+    neuralNet.trainingNetwork(epochs=100, batchSize=64, tau=0.01)
 
     ypred_test = neuralNet.feed_forward(neuralNet.xTest, isTraining=False)
     acc = neuralNet.accuracy(neuralNet.yTest, ypred_test)
-    print("Accuracy: {}".format(acc))
+    print("My      Accuracy: {}".format(acc))
+
+    clf = MLPClassifier(hidden_layer_sizes=neural_setup, learning_rate_init=0.01).fit(neuralNet.xTrain, neuralNet.yTrain)
+    print("SKLearn Accuracy: {}".format(clf.score(neuralNet.xTest, neuralNet.yTest)))
