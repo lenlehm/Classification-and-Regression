@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import os
 
-plot_dir = os.path.join(os.getcwd(), 'plots')
+plot_dir = os.path.join(os.getcwd(), 'plots\\')
 
 def plot_accuracies(accuracies, text, name): 
     #text = 'Fig. 7 Test Variance across the different lambdas.'
@@ -24,6 +24,10 @@ def plot_accuracies(accuracies, text, name):
 def get_data(pathToFile, standardized=True, normalized=False):
     """
     reads in the Excel file and possibly standardizes or normalizes it
+    Furthermore, since there are some problems with undocumented values, we use those as a new class
+    new class is called NA, since we do not know the real value. Removing those would delete 70% of the data
+    Thus it's a way to great loss so we just create a new class for marriage and education.
+
     INPUT: 
     ---------
     pathToFile: string
@@ -47,13 +51,13 @@ def get_data(pathToFile, standardized=True, normalized=False):
         print("There is something wrong with the type of the file or the path: {}".format(e))
         df = pd.read_csv(pathToFile)
 
-    ## TODO 
     ## DROP VALUES THAT ARE OUT OF RANGE!!
-    # EDUCATION: [1,2,3,4] NO 5 and 6
+    # EDUCATION: [1,2,3,4] NO 0, 5 and 6
     # martial status: [1,2,3] - NO 0 
-    # df = df.drop(df[(df.BILL_AMT1 == 0) &
-    #             (df.BILL_AMT2 == 0) &
-    #             (df.BILL_AMT3 == 0) &
+
+    # first replacing it with a number - later on with something different
+    df['EDUCATION'].replace({0: 5, 5: 5, 6: 5})
+    df['MARRIAGE'].replace({0: 4})
 
     # rename our target column
     df.rename(index=str, columns={"default payment next month": "defaultPaymentNextMonth"}, inplace=True)

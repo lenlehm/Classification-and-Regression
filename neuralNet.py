@@ -24,7 +24,7 @@ class NeuralNet():
             activation functions for each of the layers respectively
             However, no activation for the first layer - so has the shape: len(nodes) -1  
         cost_function: string
-            Type of the cost function used ['mse', 'log']
+            Type of the cost function used ['mse', 'cross_entropy']
         regularization: string
             Type of the regularization used ['l1', 'l2']
         lamda: float
@@ -171,7 +171,7 @@ class NeuralNet():
         self.act_exp = act_exp
         return act_exp/np.sum(act_exp, axis=1, keepdims=True)
 
-    def cost_function(self, y, ypred):
+    def cost_function(self, y, ypred, derivative=False):
         """
         calculate the cost of the initialized value
         INPUT:
@@ -188,10 +188,16 @@ class NeuralNet():
         """
 
         if self.cost_func == 'mse':
-            cost =  0.5 / y.reshape(-1, 1).shape[0] * np.sum( (y.reshape(-1, 1) - ypred) ** 2)
+            deriv = (y - ypred.flatten())
+            norm = ( (y.reshape(-1, 1) - ypred)**2 ).mean() * 0.5
+            return deriv if derivative else norm
 
-        if self.cost_func == 'log':
-            cost = -0.5 / y.reshape(-1, 1).shape[0] * np.sum( np.log(ypred[np.arange(ypred.shape[0]), y.reshape(-1, 1).flatten()]) )
+        if self.cost_func == 'cross_entropy':
+            deriv = ypred.flatten() - y
+            norm = -np.sum(y.reshape(-1, 1) * np.log(ypred) + (1 - y.reshape(-1, 1))*np.log(1-ypred)) / ypred.shape[0]
+            return deriv if derivative else norm
+            #https://deepnotes.io/softmax-crossentropy#derivative-of-cross-entropy-loss-with-softmax
+            #-0.5 / y.reshape(-1, 1).shape[0] * np.sum( np.log(ypred[np.arange(ypred.shape[0]), y.reshape(-1, 1).flatten()]) )
 
         if self.regularization == 'l2':
             for key in list(self.Weights.keys()):
@@ -222,7 +228,7 @@ class NeuralNet():
         if self.cost_func == 'mse':
             return -1.0 / y.shape[0] * (y - ypred.flatten())
 
-        elif self.cost_func == 'log':
+        elif self.cost_func == 'cross_entropy':
             ypred[ np.arange(ypred.shape[0]), y.flatten() ] -= 1
             return 1.0 / y.shape[0] * ypred
 
@@ -259,14 +265,14 @@ class NeuralNet():
         a: numpy.ndarray
             output after forwardpass (activation(W*x + b) )
         """
-
+        # input
         self.A['A0'] = x
         for i in range(self.nLayers):
             z = np.dot( self.A['A'+str(i)], self.Weights['W'+str(i+1)] ) + self.Biases['B'+str(i+1)]
             a = self.activation_function(z, self.activations[i])
             self.A['A'+str(i+1)] = a
 
-        if self.cost_func == 'log':
+        if self.cost_func == 'cross_entropy':
             a = self.softmax(a)
 
         if isTraining:
@@ -286,18 +292,22 @@ class NeuralNet():
         if yTrue is None:
             yTrue = self.yTrain
 
-        for i in range(self.nLayers, 0, -1):
+        # work the way from back to front, start at the output now
+        for i in range(self.nLayers, 0, -1): # reverse range
             if i == self.nLayers:
-                c = self.cost_function_derivative(yTrue, self.output)
+                deltaCost = self.cost_function(yTrue, self.output, derivative=True)
+                deltaCost = deltaCost.values.reshape(-1, self.nodes[len(self.nodes) -1])
+                # delta.shape = (BatchSize, lastNode)
             else:
+                #print(c.shape, self.Weights['W'+str(i+1)].shape)
                 try:
-                    c = np.dot(c, self.Weights['W'+str(i+1)].T)
-                except: # for the very first iteration
-                    c = np.dot(c, self.Weights['W'+str(i+1)])
-                c = c * self.activation_function(self.A['A'+str(i)], self.activations[i-1], derivative=True)
+                    deltaCost = np.dot(deltaCost, self.Weights['W'+str(i+1)].T)
+                except: 
+                    deltaCost = np.dot(deltaCost, self.Weights['W'+str(i+1)])
+                deltaCost = deltaCost * self.activation_function(self.A['A'+str(i)], self.activations[i-1], derivative=True)
 
-            grad_w = np.dot(self.A['A'+str(i-1)].T, c)
-            grad_b = np.sum(c, axis= 0)
+            grad_w = np.dot(self.A['A'+str(i-1)].T, deltaCost)
+            grad_b = np.sum(deltaCost, axis= 0)
 
             self.Weights_grad['dW'+str(i)] = grad_w
             self.Biases_grad['dB'+str(i)] = grad_b
@@ -308,8 +318,7 @@ class NeuralNet():
             elif self.regularization == 'l1':
                 self.Weights['W'+str(i)] -= self.eta * (grad_w + self.lamb*np.sign(self.Weights['W'+str(i)]))
 
-            else:
-                #updateSize = (self.eta * grad_w).reshape(-1, 1)
+            else: # update step
                 try:
                     self.Weights['W'+str(i)] -= (self.eta * grad_w).reshape(-1, 1)
                 except:
@@ -339,16 +348,16 @@ class NeuralNet():
         else:
             eta = lambda t : tau
 
-        num_batch = int(self.nTrain // batchSize)
+        num_batch_per_epoch = int(self.nTrain // batchSize)
 
         self.convergence_rate = {'Epoch': [], 'Test Accuracy': []}
         for epoch in range(epochs +1):
             indices = np.random.choice(self.nTrain, self.nTrain, replace=False)
 
-            for b in range(num_batch):
-                self.eta = eta(epoch*num_batch+b)
+            for batch in range(num_batch_per_epoch):
+                self.eta = eta(epoch * num_batch_per_epoch + batch)
                 # get the batches 
-                batch = indices[b*batchSize : (b+1)*batchSize]
+                batch = indices[batch * batchSize : (batch+1)*batchSize]
                 yBatch = self.yTrain[batch]
 
                 #self.xTrain.set_index(np.arange(self.xTrain.shape[0]), inplace=True)
@@ -363,9 +372,10 @@ class NeuralNet():
                 ypred_test  = self.feed_forward(self.xTest, isTraining=False)
                 trainError  = self.cost_function(self.yTrain, ypred_train)
                 testError   = self.cost_function(self.yTest, ypred_test)
+                print(testError)
                 print("[ERROR]: {} epoch from {}: Training Error:  {}, Test Error  {}".format(epoch, epochs+1, trainError, testError))
 
-                if self.cost_func == 'log':
+                if self.cost_func == 'cross_entropy':
                     trainAcc = self.accuracy(self.yTrain, ypred_train)
                     testAcc = self.accuracy(self.yTest, ypred_test)
                     print("[ACCURACY]: {} epoch from {}: Training Acc:  {}, Test Acc  {}".format(epoch, epochs+1, trainAcc, testAcc))
@@ -379,9 +389,12 @@ if __name__ == '__main__':
     filename = "\\default of credit card clients.xls"
     filePath = cwd + filename
     X, y = get_data(filePath, standardized=False, normalized=False)
-    neuralNet = NeuralNet(X, y, nodes=[23, 64, 64, 128, 1], activations=['relu', 'relu','relu', 'sigmoid'])
+    # note that the activation functions need to be 1 smaller than the node length
+    activation_functions    = ['relu', 'relu', None]
+    neural_setup            = [23, 128, 64, 1] # first needs to be 23 and last needs to be 1
+    neuralNet = NeuralNet(X, y, nodes=neural_setup, activations=activation_functions)
     neuralNet.split_data(test_size=0.2)
-    neuralNet.trainingNetwork(epochs=250, batchSize=128, tau=0.01)
+    neuralNet.trainingNetwork(epochs=250, batchSize=100, tau=0.01)
 
     ypred_test = neuralNet.feed_forward(neuralNet.xTest, isTraining=False)
     acc = neuralNet.accuracy(neuralNet.yTest, ypred_test)
