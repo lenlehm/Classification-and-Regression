@@ -190,9 +190,9 @@ class LogisticRegression():
                 break
 
         ## Benchmark it against Scikit Learn
-        clf = linear_model.LogisticRegression(solver='lbfgs').fit(self.X_train, self.y_train)
+        clf = linear_model.LogisticRegression(solver='lbfgs', C=lamda).fit(self.X_train, self.y_train)
         print("Scikit Accuracy on Test Set: {}".format(clf.score(self.X_test, self.y_test)))
-        print("My     Accuracy on Test Set: {}".format(self.train_accuracy[-1], self.test_accuracy[-1]))
+        print("My     Accuracy on Test Set: {}, lambda: {}".format(self.test_accuracy[-1], lamda))
 
 
 # TEST THAT SHIT
@@ -205,7 +205,7 @@ if __name__ == '__main__':
     
     # read the dataset
     cwd = os.getcwd()
-    filename = "\\default of credit card clients.xls"
+    filename = "\\data\\default of credit card clients.xls"
     filePath = cwd + filename
     X, y = get_data(filePath, standardized=False, normalized=False)
     logistic = LogisticRegression(X, y, test_size=0.2)
@@ -217,6 +217,6 @@ if __name__ == '__main__':
     # plot_accuracies(logistic.test_accuracy, text, name)
     
     # check for different lambdas
-    # lambdas = np.logspace(-4,4,9)
-    # for lamda in lambdas:
-    #     logistic.optimize(batch_size=batch, regularization='l2', epochs=1000, lamda=lamda)
+    lambdas = np.logspace(-4,4,9)
+    for lamda in lambdas:
+        logistic.optimize(batch_size=batches, regularization='l1', epochs=1000, lamda=lamda)

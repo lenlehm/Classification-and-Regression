@@ -38,6 +38,7 @@ class NeuralNet():
         self.cost_func = cost_function
         self.regularization = regularization
         self.lamda = lamda
+        self.learning_rate = []
 
         if (len(activations) != len(nodes) -1) :
             raise ValueError("You provided a wrong input! \nUsage should be: nodes = [input, hidden layer1, ..., hidden layer n, output].\nActiavations need to be 1 smaller (len(nodes) - 1)!")
@@ -315,8 +316,8 @@ class NeuralNet():
             number of epochs to do
         batchSize: int
             size of the batches -> one epoch = len(Data) / batchSize
-        tau: float
-            learning rate
+        tau: float or string
+            learning rate type and potentially the normal learning rate
         n_print: int
             stepsize of when to calculate the errors and print them
         """
@@ -345,6 +346,8 @@ class NeuralNet():
                 # propagate them through the network twice (forward and backward)
                 self.feed_forward(xBatch)
                 self.backpropagation(yBatch)
+
+                #self.learning_rate.append(self.eta)
 
             if epoch == 0 or epoch % n_print == 0:
                 ypred_train = self.feed_forward(self.xTrain, isTraining=False)
