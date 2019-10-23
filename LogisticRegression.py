@@ -84,6 +84,71 @@ def get_data(pathToFile, standardized=True, normalized=False):
     X.set_index(pd.Series(np.arange(len(df[features]))), inplace=True)
     return X, y
 
+    def gain_chart(self, threshold = 0.5, plot = True):
+        """
+        Creates a gains chart for the predicted y-values
+        when classifying a binary variable. Predicted y-values
+        are given as a percent confidence of which class it
+        belongs to. The percent over the given threshold is
+        predicted as class 1 and everything under is given
+        as class 2.
+        INPUT:
+        --------
+        threshold: float
+            number in the interval between [0, .., 1] = threshold among the classes
+        plot: boolean
+            flag of whether to plot or not
+        OUTPUT:
+        ----------
+        ratio: float
+            returns the ratio
+        """
+        y = self.y
+        ypred = self.ypred
+
+        num1 = np.sum(y)
+        frac1 = num1/y.shape[0]
+        sort = np.argsort(ypred[:, -1])
+        lab_sort = y[sort[::-1]]
+
+        fracs = np.arange(0, 1.01, 0.01)
+        gains = np.zeros(len(fracs))
+
+        for i in range(len(fracs)):
+            lab_frac = lab_sort[:int(fracs[i]*y.shape[0])]
+            gains[i] = np.sum(lab_frac)/num1
+
+        def best(x):
+            if x < frac1:
+                return x/frac1
+            else:
+                return 1
+
+        besty = np.zeros_like(fracs)
+        for i in range(len(besty)):
+            besty[i] = best(fracs[i])
+
+        area_best = np.trapz(besty - fracs, fracs)
+        area_model = np.trapz(gains - fracs, fracs)
+        ratio = area_model/area_best
+        self.gain_params = [fracs, gains, besty]
+        self.gain_dict = {'fracs': fracs, 'gains':gains, 'besty':besty, 'ratio':ratio}
+        self.ratio = ratio
+        if plot:
+            self.plot_gains(*self.gain_params)
+        return ratio
+
+    def plot_gains(self, fracs, gains, besty, ratio):
+        plt.plot(fracs, gains, label='Lift Curve')
+        plt.plot(fracs, fracs, '--', label='Baseline')
+        plt.plot(fracs, besty, '--', label='Best Curve')
+        plt.plot([], [], ' ', label='Area ratio: %.4f' % ratio)
+        plt.xlabel('Fraction of total data', fontsize=14)
+        plt.ylabel('Cumulative number of target data', fontsize=14)
+        plt.grid(True)
+        plt.legend()
+        plt.show()
+
 ## Logistic Regression Class Implementation with Stochastic Gradient Descent
 class LogisticRegression():
     def __init__(self, X, y, test_size=0.2):
@@ -145,8 +210,12 @@ class LogisticRegression():
 
             # Shuffle training data
             #self.X_train.set_index(np.arange(self.X_train.shape[0]), inplace=True)
-            X_train = self.X_train.iloc[ np.random.permutation(self.X_train.shape[0]) ]
-            y_train = self.y_train.iloc[ np.random.permutation(self.y_train.shape[0]) ]
+            try:
+                X_train = self.X_train.iloc[ np.random.permutation(self.X_train.shape[0]) ]
+                y_train = self.y_train.iloc[ np.random.permutation(self.y_train.shape[0]) ]
+            except: 
+                X_train = self.X_train[ np.random.permutation(self.X_train.shape[0]) ]
+                y_train = self.y_train[ np.random.permutation(self.y_train.shape[0]) ]                
 
             for i in range(iterPerEpoch):
                 # create the batches
@@ -190,8 +259,8 @@ class LogisticRegression():
                 break
 
         ## Benchmark it against Scikit Learn
-        clf = linear_model.LogisticRegression(solver='lbfgs', C=lamda).fit(self.X_train, self.y_train)
-        print("Scikit Accuracy on Test Set: {}".format(clf.score(self.X_test, self.y_test)))
+        #clf = linear_model.LogisticRegression(solver='lbfgs', C=lamda).fit(self.X_train, self.y_train)
+        #print("Scikit Accuracy on Test Set: {}".format(clf.score(self.X_test, self.y_test)))
         print("My     Accuracy on Test Set: {}, lambda: {}".format(self.test_accuracy[-1], lamda))
 
 

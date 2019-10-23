@@ -1,4 +1,5 @@
 import matplotlib.pylab as plt
+import pandas as pd
 import numpy as np
 import sys
 import os
@@ -66,12 +67,20 @@ class NeuralNet():
         if folds == None and test_size == None:
             raise ValueError("You need to give either a test_size fraction or the number of folds")
 
-        xData = self.xData
-        yData = self.yData
+        if type(self.xData).__module__ == np.__name__:
+            self.xData = pd.DataFrame(self.xData)
+            self.yData = pd.DataFrame(self.yData)
+        else:
+            xData = self.xData
+            yData = self.yData
 
         if shuffle:
-            xData = self.xData.iloc[ np.random.permutation(self.N) ]
-            yData = self.yData.iloc[ np.random.permutation(self.N) ]
+            try:
+                xData = self.xData.iloc[ np.random.permutation(self.N) ]
+                yData = self.yData.iloc[ np.random.permutation(self.N) ]
+            except: 
+                xData = self.xData[ np.random.permutation(self.N) ]
+                yData = self.yData[ np.random.permutation(self.N) ]
 
         if folds != None:
             xFolds = np.array_split(xData, folds, axis = 0)
@@ -190,26 +199,39 @@ class NeuralNet():
         """
 
         if self.cost_func == 'mse':
-            deriv = ypred.flatten() - y
-            norm = ( (y.reshape(-1, 1) - ypred)**2 ).mean() * 0.5
-            return deriv if derivative else norm
+            if derivative: 
+                try: 
+                    deriv = ypred.flatten() - y
+                except:
+                    deriv = ypred - y
+                return deriv
+            else:
+                y = np.array(y)
+                norm = ( (y.reshape(-1, 1) - ypred)**2 ).mean() * 0.5
+                return norm #deriv if derivative else norm
 
         if self.cost_func == 'cross_entropy':
-            deriv = ypred.flatten() - y
-            norm = -np.sum(y.reshape(-1, 1) * np.log(ypred) + (1 - y.reshape(-1, 1))*np.log(1-ypred)) / ypred.shape[0]
-            return deriv if derivative else norm
+            if derivative: 
+                try: 
+                    deriv = ypred.flatten() - y
+                except: 
+                    deriv = ypred - y
+                return deriv
+            else: 
+                norm = -np.sum(y.reshape(-1, 1) * np.log(ypred) + (1 - y.reshape(-1, 1))*np.log(1-ypred)) / ypred.shape[0]
+                return norm # deriv if derivative else norm
             #https://deepnotes.io/softmax-crossentropy#derivative-of-cross-entropy-loss-with-softmax
             #-0.5 / y.reshape(-1, 1).shape[0] * np.sum( np.log(ypred[np.arange(ypred.shape[0]), y.reshape(-1, 1).flatten()]) )
 
         if self.regularization == 'l2':
             for key in list(self.Weights.keys()):
                 cost += self.lamb/2*np.sum(self.Weights[key]**2)
+            return cost
 
-        elif self.regularization == 'l1':
+        if self.regularization == 'l1':
             for key in list(self.Weights.keys()):
                 cost += self.lamb/2*np.sum(np.abs(self.Weights[key]))
-
-        return cost
+            return cost
 
 
     def accuracy(self, y, ypred):
@@ -338,9 +360,13 @@ class NeuralNet():
                 self.eta = eta(epoch * num_batch_per_epoch + batch)
                 # get the batches 
                 batch = indices[batch * batchSize : (batch+1)*batchSize]
-                yBatch = self.yTrain[batch]
+                # somehow running into index errors always ...
+                self.yTrain.set_index(np.arange(self.yTrain.shape[0]), inplace=True)
+                self.xTrain.set_index(np.arange(self.xTrain.shape[0]), inplace=True)
 
-                #self.xTrain.set_index(np.arange(self.xTrain.shape[0]), inplace=True)
+                #print(self.yTrain.index)
+
+                yBatch = self.yTrain.iloc[batch]
                 xBatch = self.xTrain.iloc[batch]
 
                 # propagate them through the network twice (forward and backward)
@@ -383,3 +409,67 @@ if __name__ == '__main__':
 
     clf = MLPClassifier(hidden_layer_sizes=neural_setup, learning_rate_init=0.01).fit(neuralNet.xTrain, neuralNet.yTrain)
     print("SKLearn Accuracy: {}".format(clf.score(neuralNet.xTest, neuralNet.yTest)))
+
+## ------------------------------ OTHER CODE TO CHECK
+'''
+    def feed_forward(self):
+        self.z1 = np.matmul(self.X_data, self.hidden_weights) + self.hidden_bias
+        self.a1 = sigmoid(self.z1)
+
+        self.z2 = np.matmul(self.a1, self.output_weights) + self.output_bias
+
+        exp_term = np.exp(self.z2)
+        self.probabilities = exp_term / np.sum(exp_term, axis=1, keepdims=True)
+
+    def feed_forward_out(self, X):
+        z1 = np.matmul(X, self.hidden_weights) + self.hidden_bias
+        a1 = sigmoid(z1)
+
+        z2 = np.matmul(a1, self.output_weights) + self.output_bias
+        
+        exp_term = np.exp(z2)
+        probabilities = exp_term / np.sum(exp_term, axis=1, keepdims=True)
+        return probabilities
+
+    def backpropagation(self):
+        error_output = self.probabilities - self.Y_data
+        error_hidden = np.matmul(error_output, self.output_weights.T) * self.a1 * (1 - self.a1)
+
+        self.output_weights_gradient = np.matmul(self.a1.T, error_output)
+        self.output_bias_gradient = np.sum(error_output, axis=0)
+
+        self.hidden_weights_gradient = np.matmul(self.X_data.T, error_hidden)
+        self.hidden_bias_gradient = np.sum(error_hidden, axis=0)
+
+        if self.lmbd > 0.0:
+            self.output_weights_gradient += self.lmbd * self.output_weights
+            self.hidden_weights_gradient += self.lmbd * self.hidden_weights
+
+        self.output_weights -= self.eta * self.output_weights_gradient
+        self.output_bias -= self.eta * self.output_bias_gradient
+        self.hidden_weights -= self.eta * self.hidden_weights_gradient
+        self.hidden_bias -= self.eta * self.hidden_bias_gradient
+
+    def predict(self, X):
+        probabilities = self.feed_forward_out(X)
+        return np.argmax(probabilities, axis=1)
+
+    def predict_probabilities(self, X):
+        probabilities = self.feed_forward_out(X)
+        return probabilities
+
+    def train(self):
+        data_indices = np.arange(self.n_inputs)
+
+        for i in range(self.epochs):
+            for j in range(self.iterations):
+                chosen_datapoints = np.random.choice(
+                    data_indices, size=self.batch_size, replace=False
+                )
+
+                self.X_data = self.X_data_full[chosen_datapoints]
+                self.Y_data = self.Y_data_full[chosen_datapoints]
+
+                self.feed_forward()
+                self.backpropagation()
+'''
