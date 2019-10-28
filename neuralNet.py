@@ -207,7 +207,7 @@ class NeuralNet():
                 return deriv
             else:
                 y = np.array(y)
-                norm = ( (y.reshape(-1, 1) - ypred)**2 ).mean() * 0.5
+                norm = ( (y.flatten() - ypred)**2 ).mean() * 0.5
                 return norm #deriv if derivative else norm
 
         if self.cost_func == 'cross_entropy':
@@ -218,7 +218,7 @@ class NeuralNet():
                     deriv = ypred - y
                 return deriv
             else: 
-                norm = -np.sum(y.reshape(-1, 1) * np.log(ypred) + (1 - y.reshape(-1, 1))*np.log(1-ypred)) / ypred.shape[0]
+                norm = -np.sum(y.flatten() * np.log(ypred) + (1 - y.reshape(-1, 1))*np.log(1-ypred)) / ypred.shape[0]
                 return norm # deriv if derivative else norm
             #https://deepnotes.io/softmax-crossentropy#derivative-of-cross-entropy-loss-with-softmax
             #-0.5 / y.reshape(-1, 1).shape[0] * np.sum( np.log(ypred[np.arange(ypred.shape[0]), y.reshape(-1, 1).flatten()]) )
