@@ -206,8 +206,10 @@ class NeuralNet():
                     deriv = ypred - y
                 return deriv
             else:
-                y = np.array(y)
-                cost = ( (y.flatten() - ypred)**2 ).mean() * 0.5
+                try:
+                    cost = ( (y.flatten() - ypred)**2 ).mean() * 0.5
+                except: 
+                    cost = ( (y.values.flatten() - ypred)**2 ).mean() * 0.5
             #return deriv if derivative else cost
 
             # using binary cross entropy
@@ -278,13 +280,17 @@ class NeuralNet():
             a = self.activation_function(z, self.activations[i])
             self.A['A'+str(i+1)] = a
 
-        if self.cost_func == 'cross_entropy':
-            a = self.softmax(a)
+        # if self.cost_func == 'cross_entropy':
+        #     a = self.softmax(a)
 
         if isTraining:
             self.output = a
         else:
-            return a
+            #print("OUTPUT: {}".format(a))
+            #print(np.unique(a, return_counts=True))
+            probs = self.softmax(a)
+            print(probs[:10])
+            return np.argmax(probs, axis=1)
 
 
     def backpropagation(self, yTrue=None):
@@ -301,7 +307,7 @@ class NeuralNet():
         # work the way from back to front, start at the output now
         for i in range(self.nLayers, 0, -1): # reverse range
             if i == self.nLayers:
-                deltaCost = self.cost_function(yTrue, self.output, derivative=True)
+                deltaCost = self.cost_function(yTrue, self.output, derivative=False)
                 deltaCost = deltaCost.values.reshape(-1, self.nodes[len(self.nodes) -1])
                 # delta.shape = (BatchSize, lastNode)
             else:
@@ -401,19 +407,18 @@ if __name__ == '__main__':
     filePath = os.path.join(cwd, filename)
     X, y = get_data(filePath, standardized=False, normalized=False)
     # note that the activation functions need to be 1 smaller than the node length
-    activation_functions    = ['relu', 'relu', 'relu', 'sigmoid', None]
+    activation_functions    = ['relu', 'relu', 'relu', 'tanh', None]
     neural_setup            = [23, 128, 64, 32, 32, 1] # first needs to be 23 and last needs to be 1
     neuralNet = NeuralNet(X, y, nodes=neural_setup, activations=activation_functions, cost_function='cross_entropy')
     neuralNet.split_data(test_size=0.2)
-    neuralNet.trainingNetwork(epochs=100, batchSize=64, tau=0.01)
+    neuralNet.trainingNetwork(epochs=4, batchSize=64, tau=0.001)
 
     ypred_test = neuralNet.feed_forward(neuralNet.xTest, isTraining=False)
-    print(ypred_test.shape, ypred_test)
-    #acc = neuralNet.accuracy(neuralNet.yTest, ypred_test)
-    #print("My      Accuracy: {}".format(acc))
+    acc = neuralNet.accuracy(neuralNet.yTest, ypred_test)
+    print("My      Accuracy: {}".format(acc))
 
     print(np.unique(ypred_test, return_counts=True))
-    print(neuralNet.yTest)
+    #print(neuralNet.yTest)
 
     #print(neuralNet.Weights['W1'], neuralNet.Weights['W3'])
     #print(neuralNet.Biases['B1'], neuralNet.Biases['B3'])
