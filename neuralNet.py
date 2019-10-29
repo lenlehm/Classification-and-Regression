@@ -163,7 +163,7 @@ class NeuralNet():
             return 1 - x**2 if derivative else np.tanh(x)
 
         elif act_func == 'relu':
-            return 1*(x >= 0) if derivative else x * (x >= 0)
+            return 1 * (x > 0.0) if derivative else np.maximum(0, x)
 
         elif act_func == None: # identity
             return 1 if derivative else x
@@ -180,7 +180,7 @@ class NeuralNet():
         # Subtraction of max value for numerical stability
         act_exp = np.exp(act - np.max(act))
         self.act_exp = act_exp
-        return act_exp/np.sum(act_exp, axis=1, keepdims=True)
+        return act_exp / np.sum(act_exp, axis=1, keepdims=True)
 
     def cost_function(self, y, ypred, derivative=False):
         """
@@ -207,9 +207,10 @@ class NeuralNet():
                 return deriv
             else:
                 y = np.array(y)
-                norm = ( (y.flatten() - ypred)**2 ).mean() * 0.5
-                return norm #deriv if derivative else norm
+                cost = ( (y.flatten() - ypred)**2 ).mean() * 0.5
+            #return deriv if derivative else cost
 
+            # using binary cross entropy
         if self.cost_func == 'cross_entropy':
             if derivative: 
                 try: 
@@ -218,20 +219,24 @@ class NeuralNet():
                     deriv = ypred - y
                 return deriv
             else: 
-                norm = -np.sum(y.flatten() * np.log(ypred) + (1 - y.reshape(-1, 1))*np.log(1-ypred)) / ypred.shape[0]
-                return norm # deriv if derivative else norm
+                try:
+                    cost = -np.sum( y.flatten() * np.log(ypred) + (1 - y.flatten() * np.log(1 - ypred)) ) / ypred.shape[0]
+                except: # Series has no attribute flatten
+                    cost = -np.sum( y.values.flatten() * np.log(ypred) + (1 - y.values.flatten() * np.log(1 - ypred)) ) / ypred.shape[0]
+                
+            #return deriv if derivative else cost
             #https://deepnotes.io/softmax-crossentropy#derivative-of-cross-entropy-loss-with-softmax
             #-0.5 / y.reshape(-1, 1).shape[0] * np.sum( np.log(ypred[np.arange(ypred.shape[0]), y.reshape(-1, 1).flatten()]) )
 
         if self.regularization == 'l2':
             for key in list(self.Weights.keys()):
-                cost += self.lamb/2*np.sum(self.Weights[key]**2)
-            return cost
+                cost += self.lamda / 2 * np.sum(self.Weights[key]**2)
 
-        if self.regularization == 'l1':
+        elif self.regularization == 'l1':
             for key in list(self.Weights.keys()):
-                cost += self.lamb/2*np.sum(np.abs(self.Weights[key]))
-            return cost
+                cost += self.lamda / 2 * np.sum(np.abs(self.Weights[key]))
+        
+        return cost
 
 
     def accuracy(self, y, ypred):
@@ -248,8 +253,7 @@ class NeuralNet():
         ---------
         returns the calculated accuracy
         """
-        cls_pred = np.argmax(ypred, axis=1)
-        return 100.0 / y.shape[0] * np.sum(cls_pred == y)
+        return (np.array(ypred) == np.array(y)).all(axis=0).mean()
 
 
     def feed_forward(self, x, isTraining = True):
@@ -315,10 +319,10 @@ class NeuralNet():
             self.Biases_grad['dB'+str(i)] = grad_b
 
             if self.regularization == 'l2':
-                self.Weights['W'+str(i)] -= self.eta * (grad_w + self.lamb*self.Weights['W'+str(i)])
+                self.Weights['W'+str(i)] -= self.eta * (grad_w + self.lamda * self.Weights['W'+str(i)])
 
             elif self.regularization == 'l1':
-                self.Weights['W'+str(i)] -= self.eta * (grad_w + self.lamb*np.sign(self.Weights['W'+str(i)]))
+                self.Weights['W'+str(i)] -= self.eta * (grad_w + self.lamda * np.sign(self.Weights['W'+str(i)]))
 
             else: # update step
                 try:
@@ -329,7 +333,7 @@ class NeuralNet():
             self.Biases['B'+str(i)] -= self.eta * grad_b
 
 
-    def trainingNetwork(self, epochs=1000, batchSize=200, tau=0.01, n_print=100):
+    def trainingNetwork(self, epochs=1000, batchSize=200, tau=0.001, n_print=100):
         """
         Training the neural network by utilizing forward and backward propagation
         INPUT:
@@ -361,8 +365,8 @@ class NeuralNet():
                 # get the batches 
                 batch = indices[batch * batchSize : (batch+1)*batchSize]
                 # somehow running into index errors always ...
-                self.yTrain.set_index(np.arange(self.yTrain.shape[0]), inplace=True)
-                self.xTrain.set_index(np.arange(self.xTrain.shape[0]), inplace=True)
+                #self.yTrain.set_index(np.arange(self.yTrain.shape[0]), inplace=True)
+                #self.xTrain.set_index(np.arange(self.xTrain.shape[0]), inplace=True)
 
                 #print(self.yTrain.index)
 
@@ -397,18 +401,32 @@ if __name__ == '__main__':
     filePath = os.path.join(cwd, filename)
     X, y = get_data(filePath, standardized=False, normalized=False)
     # note that the activation functions need to be 1 smaller than the node length
-    activation_functions    = ['relu', 'relu', 'relu', 'relu', None]
+    activation_functions    = ['relu', 'relu', 'relu', 'sigmoid', None]
     neural_setup            = [23, 128, 64, 32, 32, 1] # first needs to be 23 and last needs to be 1
     neuralNet = NeuralNet(X, y, nodes=neural_setup, activations=activation_functions, cost_function='cross_entropy')
     neuralNet.split_data(test_size=0.2)
     neuralNet.trainingNetwork(epochs=100, batchSize=64, tau=0.01)
 
     ypred_test = neuralNet.feed_forward(neuralNet.xTest, isTraining=False)
-    acc = neuralNet.accuracy(neuralNet.yTest, ypred_test)
-    print("My      Accuracy: {}".format(acc))
+    print(ypred_test.shape, ypred_test)
+    #acc = neuralNet.accuracy(neuralNet.yTest, ypred_test)
+    #print("My      Accuracy: {}".format(acc))
 
-    clf = MLPClassifier(hidden_layer_sizes=neural_setup, learning_rate_init=0.01).fit(neuralNet.xTrain, neuralNet.yTrain)
-    print("SKLearn Accuracy: {}".format(clf.score(neuralNet.xTest, neuralNet.yTest)))
+    print(np.unique(ypred_test, return_counts=True))
+    print(neuralNet.yTest)
+
+    #print(neuralNet.Weights['W1'], neuralNet.Weights['W3'])
+    #print(neuralNet.Biases['B1'], neuralNet.Biases['B3'])
+
+    #clf = MLPClassifier(hidden_layer_sizes=neural_setup, learning_rate_init=0.01).fit(neuralNet.xTrain, neuralNet.yTrain)
+    #print("SKLearn Accuracy: {}".format(clf.score(neuralNet.xTest, neuralNet.yTest)))
+
+
+
+
+
+
+
 
 ## ------------------------------ OTHER CODE TO CHECK
 '''
