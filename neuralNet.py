@@ -76,23 +76,6 @@ class NeuralNetwork :
             return np.random.normal(size=(n_in, n_out))
 
 
-    def addOutputLayer(self, outputs=None, activations=None):
-        """
-        Function adds an Output layer to the network
-
-        INPUT:
-        --------
-        outputs: int
-            Output size of the Neural network, either as many classes as you want to classify or 1 for Regression
-        activations: string
-            name of the activation function to be used, default is None
-
-        OUTPUT: 
-        ---------
-            stores the results in the member variables
-        """
-        self.addLayer(outputs=outputs, output=True, activations=activations)
-
     def addLayer(self, inputs=None, neurons=None, activations=None, alpha=None, outputs=None, output=False):
         """
         Function to setup the neural network architecture
@@ -196,14 +179,12 @@ class NeuralNetwork :
         ---------
             returns the result from the next (hidden) layer
         """
-        # i = layer_number
-
         W = self.weights[i]
         b = self.biases[i]
         f = self.act[i]
         self.a[i+1] = f(np.dot(W.T, x) + b)
-
         return self.a[i+1]
+
 
     def __call__(self, x) :
         return self.network(x)
