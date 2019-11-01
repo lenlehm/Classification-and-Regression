@@ -1,8 +1,19 @@
 import numpy as np
 import sys
 
-
 class Activation :
+    '''
+    class to make a modular approach for the activation functions along with their derivatives
+    Implemented Activation Functions: 
+        - Softmax
+        - ReLU
+        - Leaky ReLU
+        - ELU
+        - Sigmoid
+        - tanh
+        - Identity
+
+    '''
     def __init__(self, function=None, alpha=None):
         self.derivative = None
         self.function = function if (function is not None) else 'sigmoid'
@@ -11,6 +22,9 @@ class Activation :
         self.function = self._parseFunctionString(self.function)
 
     def set(self, function=None, alpha=None):
+        '''
+        constructor method to create the member variables and init them properly
+        '''
         self.alpha = alpha if (alpha is not None) else self.alpha
         if function is not None :
             self.function = function
@@ -19,6 +33,9 @@ class Activation :
     
 
     def _parseFunctionString(self, string) :
+        '''
+        check which activation function to use and call the mathematical function
+        '''
         self.name = string
         if string == 'sigmoid' :
             self.derivative = self._sigmoid_derivative
@@ -44,6 +61,7 @@ class Activation :
         else :
             raise ValueError("Unrecognized activation function <" + str(string) + ">.")
 
+    ## --------------------- DOWN THERE IS THE MATHEMATICAL TURD OF EACH OF THE FUNCTIONS ----------------
     def _sigmoid(self, x) :
         return 1.0 / (1.0 + np.exp(-x))
 
