@@ -1,498 +1,541 @@
-import matplotlib.pylab as plt
+from Activation import Activation
+from sklearn import metrics
+from math import ceil
 import pandas as pd
 import numpy as np
-import sys
+import warnings
+import sklearn
+import pickle
+import copy
+import time
 import os
-from LogisticRegression import get_data
-from sklearn.neural_network import MLPClassifier # benchmarking
 
-class NeuralNet():
 
-    def __init__(self, xData, yData, nodes=[23, 10, 1], activations=['sigmoid', None], cost_function='mse', regularization=None, lamda=0.0):
-        """
-        This method is used to create a Multi Layered Perceptron (MLP)
+class NeuralNetwork :
+    '''
+    This Class implements a neural network (MLP) from scratch with all its necessary functions.
+    '''
+    def __init__(self, inputs=None,outputs=None, layers=None, neurons=None, activations=None, cost_function_name='mse', lmbda=0.0):
+        self.inputs         = inputs
+        self.outputs        = outputs
+        self.layers         = layers
+        self.neurons        = neurons
+        self.activations    = activations
+        self.lmbda          = lmbda
+
+        self.weights        = None
+        self.biases         = None
+
+        self.cost_fct_name  = cost_function_name
+
+        self.first_feedforward = True
+        self.first_backprop    = True
+        self.adam_initialized  = False
+
+    def set(self, inputs=None, outputs=None, layers=None, neurons=None, activations=None):
+        '''
+        this function is basically a constructor and sets the values needed for the future
+        '''
+        self.inputs         = inputs        if (inputs      is not None) else self.inputs
+        self.outputs        = outputs       if (outputs     is not None) else self.outputs
+        self.layers         = layers        if (layers      is not None) else self.layers
+        self.neurons        = neurons       if (neurons     is not None) else self.neurons
+        self.activations    = activations   if (activations is not None) else self.activations
+
+
+    def initializeWeight(self, n_in, n_out, activations):
+        '''
+        Initializes the Weights according to the Xavier Initialization or He Initialization (see papers below)
         
         INPUT:
-        ---------
-        X: pandas.DataFrame
-            Data for training and testing respectively
-        y: pandas.DataFrame
-            Corresponding target values to the data above
-        nodes: list of integers
-            Number of neurons/ units in each layer, the length of the lists represents the depth of the network (length 3 = 3  layers)
-            First number needs to be the size of the input and last element is the output we want
-            Last element 1 for regression or binary classification, otherwise multi-class classification
-        activations: list of strings
-            activation functions for each of the layers respectively
-            However, no activation for the first layer - so has the shape: len(nodes) -1  
-        cost_function: string
-            Type of the cost function used ['mse', 'cross_entropy']
-        regularization: string
-            Type of the regularization used ['l1', 'l2']
-        lamda: float
-            regularization strength
-        param: lamb: strength of regularization
-        """
-        self.xData = xData
-        self.yData = yData
-        self.N = xData.shape[0]
-        self.cost_func = cost_function
-        self.regularization = regularization
-        self.lamda = lamda
-        self.learning_rate = []
-
-        if (len(activations) != len(nodes) -1) :
-            raise ValueError("You provided a wrong input! \nUsage should be: nodes = [input, hidden layer1, ..., hidden layer n, output].\nActiavations need to be 1 smaller (len(nodes) - 1)!")
-
-        self.nodes = nodes
-        self.activations = activations
-        self.nLayers = len(activations)
-
-        self.split_data(folds=10, test_size=0.2, shuffle=True)
-        self.initialize_weights_biases()
-
-    def split_data(self, folds=None, test_size=None, shuffle=False):
-        """
-        Splits the data into training and test given the test_size
-        INPUT:
-        ---------
-        folds: int
-            number of folds that you want to split the entire data into
-        test_size: float
-            values from [0.0, ..., 1.0] representing the size of the test dataset.
-        shuffle: boolean
-            Flag stating whether to shuffle or not the entire dataset.
-        """
-
-        if folds == None and test_size == None:
-            raise ValueError("You need to give either a test_size fraction or the number of folds")
-
-        if type(self.xData).__module__ == np.__name__:
-            self.xData = pd.DataFrame(self.xData)
-            self.yData = pd.DataFrame(self.yData)
-        else:
-            xData = self.xData
-            yData = self.yData
-
-        if shuffle:
-            try:
-                xData = self.xData.iloc[ np.random.permutation(self.N) ]
-                yData = self.yData.iloc[ np.random.permutation(self.N) ]
-            except: 
-                xData = self.xData[ np.random.permutation(self.N) ]
-                yData = self.yData[ np.random.permutation(self.N) ]
-
-        if folds != None:
-            xFolds = np.array_split(xData, folds, axis = 0)
-            yFolds = np.array_split(yData, folds, axis = 0)
-
-            self.xFolds = xFolds
-            self.yFolds = yFolds
-
-        if test_size != None:
-            nTest = int( np.floor(test_size*self.N) )
-            xTrain = xData[ : -nTest]
-            xTest = xData[ -nTest : ]
-
-            yTrain = yData[ : -nTest ]
-            yTest = yData[ -nTest : ]
-
-            self.xTrain = xTrain
-            self.xTest  = xTest
-            self.yTrain = yTrain
-            self.yTest  = yTest
-            self.nTrain = xTrain.shape[0]
-            self.nTest  = xTest.shape[0]
-
-    def initialize_weights_biases(self):
-        """
-        Initializes weights and biases for all layers
-        INPUT: 
-        ---------
-        None
-        """
-
-        self.Weights        = {}
-        self.Biases         = {}
-        self.Weights_grad   = {}
-        self.Biases_grad    = {}
-        self.A              = {}
-
-        for i in range(len(self.activations)):
-
-            if self.activations[i] == 'sigmoid':
-                r = np.sqrt(6.0 / (self.nodes[i] + self.nodes[i+1]))
-                self.Weights['W'+str(i+1)] = np.random.uniform(-r, r, size=(self.nodes[i], self.nodes[i+1]))
-                self.Biases['B'+str(i+1)]  = np.random.uniform(-r, r, self.nodes[i+1])
-            elif self.activations[i] == 'tanh':
-                r = 4.0 * np.sqrt(6.0 / (self.nodes[i] + self.nodes[i+1]))
-                self.Weights['W'+str(i+1)] = np.random.uniform(-r, r, size=(self.nodes[i], self.nodes[i+1]))
-                self.Biases['B'+str(i+1)]  = np.random.uniform(-r, r, self.nodes[i+1])
-            elif self.activations[i] == 'relu':
-                self.Weights['W'+str(i+1)] = np.random.normal(size=(self.nodes[i], self.nodes[i+1])) * np.sqrt(2.0 / self.nodes[i])
-                self.Biases['B'+str(i+1)]  = np.random.normal(self.nodes[i+1]) * np.sqrt(2.0 / self.nodes[i])
-            else :
-                self.Weights['W'+str(i+1)] = np.random.normal(size=(self.nodes[i], self.nodes[i+1]))
-                self.Biases['B'+str(i+1)]  = np.random.normal(self.nodes[i+1])
-
-            self.Weights_grad['dW'+str(i+1)] = np.zeros_like(self.Weights['W'+str(i+1)])
-            self.Biases_grad['dB'+str(i+1)] = np.zeros_like(self.Biases['B'+str(i+1)])
-
-
-    def activation_function(self, x, act_func, derivative=False):
-        """
-        Calculate the activation function
-        INPUT:
-        ---------
-        x: numpy ndarray
-            data that should be chased through the activation function
-        act_func: string
-            string stating the activation function wanted ['sigmoid', 'relu', 'tanh']
-        derivative: boolean
-            flag indicating whether the derivative should be retrieved or not
+        -------
+        n_in: int
+            Number of Inputs, which is also corresponding to the number of features/ predictor variables
+        n_out: int
+            Number of Outputs, 1 for Regression, C for number of classes you want to classify
+        activations: string
+            activation function name which is being used.
 
         OUTPUT:
-        ----------
-            returns the desired activation function results.
+        --------
+            returns the values for the initialized weights
+        '''
+        # Xavier initializations (http://proceedings.mlr.press/v9/glorot10a/glorot10a.pdf).
+        if activations == 'sigmoid' :
+            r = np.sqrt(6.0 / (n_in + n_out))
+            return np.random.uniform(-r, r, size=(n_in, n_out))
+        elif activations == 'tanh' :
+            r = 4.0 * np.sqrt(6.0 / (n_in + n_out))
+            return np.random.uniform(-r, r, size=(n_in, n_out))
+
+        # He initializations (https://arxiv.org/pdf/1502.01852.pdf).
+        elif activations == 'relu' or activations == 'leaky_relu' or activations == 'elu':
+            return np.random.normal(size=(n_in, n_out)) * np.sqrt(2.0 / n_in)
+
+        else :
+            return np.random.normal(size=(n_in, n_out))
+
+
+    def addOutputLayer(self, outputs=None, activations=None):
         """
-        if act_func == 'sigmoid':
-            with np.errstate(divide='ignore'): # some runtimeWarnings
-                return x * (1 - x) if derivative else 1/(1+np.exp(-x))
+        Function adds an Output layer to the network
 
-        elif act_func == 'tanh':
-            return 1 - x**2 if derivative else np.tanh(x)
-
-        elif act_func == 'relu':
-            return 1 * (x > 0.0) if derivative else np.maximum(0, x)
-
-        elif act_func == None: # identity
-            return 1 if derivative else x
-
-        else:
-            raise ValueError("You have to select a proper activation function of ['sigmoid', 'relu', 'tanh', None].\n Given: {}".format(act_func))
-
-
-    def softmax(self, act):
-        """
-        calculates the softmax function and returns it
-        """
-
-        # Subtraction of max value for numerical stability
-        act_exp = np.exp(act - np.max(act))
-        self.act_exp = act_exp
-        return act_exp / np.sum(act_exp, axis=1, keepdims=True)
-
-    def cost_function(self, y, ypred, derivative=False):
-        """
-        calculate the cost of the initialized value
         INPUT:
         --------
-        y: numpy ndarray
-            correct targets given by the dataset
-        ypred: numpy ndarray
-            predicted targets given the training or testing features
+        outputs: int
+            Output size of the Neural network, either as many classes as you want to classify or 1 for Regression
+        activations: string
+            name of the activation function to be used, default is None
 
-        OUTPUT:
-        ----------
-        cost: float
-            cost of the function specified
+        OUTPUT: 
+        ---------
+            stores the results in the member variables
+        """
+        self.addLayer(outputs=outputs, output=True, activations=activations)
+
+    def addLayer(self, inputs=None, neurons=None, activations=None, alpha=None, outputs=None, output=False):
+        """
+        Function to setup the neural network architecture
+
+        INPUT:
+        --------
+        inputs: int
+            inputs/ features/ predictor variables into the network, default is None
+        neurons: int
+            Amount of Neurons (or Units) to be utilized in this respective layer, default is None
+        activations: string
+            states the activation function to be used of ['elu', 'relu', 'leaky_relu', 'sigmoid', 'tanh', 'softmax'], default is None
+        alpha: float
+            alpha value for the leaky_relu activation function, default is 0.01 (in Activation.py)
+        outputs: int
+            output layer size, i.e. number of classes to classify or 1 for Regression.
+        output: boolean
+            flag for the right last shape of the Biases and Weights, default is False
+
+        OUTPUT: 
+        ---------
+            stores the results in the member variables
         """
 
-        if self.cost_func == 'mse':
-            if derivative: 
-                try: 
-                    deriv = ypred.flatten() - y
-                except:
-                    deriv = ypred - y
-                return deriv
+        ## Check for the proper Input and raise errors if not satisfied
+        if neurons is None :
+            if self.neurons is None :
+                raise ValueError("Please state the number of neurons in a layer")
             else:
-                try:
-                    cost = ( (y.flatten() - ypred)**2 ).mean() * 0.5
-                except: 
-                    cost = ( (y.values.flatten() - ypred)**2 ).mean() * 0.5
-            #return deriv if derivative else cost
+                neurons = self.neurons
+        if activations is None :
+            if self.activations is None :
+                warnings.warn("Please specify the activation functions for the hidden layers, using sigmoid now")
+                self.activations = 'sigmoid'
+                activations = self.activations
+            else :
+                activations = self.activations
 
-            # using binary cross entropy
-        if self.cost_func == 'cross_entropy':
-            if derivative: 
-                try: 
-                    deriv = ypred.flatten() - y
-                except: 
-                    deriv = ypred - y
-                return deriv
-            else: 
-                try:
-                    cost = -np.sum( y.flatten() * np.log(ypred) + (1 - y.flatten() * np.log(1 - ypred)) ) / ypred.shape[0]
-                except: # Series has no attribute flatten
-                    cost = -np.sum( y.values.flatten() * np.log(ypred) + (1 - y.values.flatten() * np.log(1 - ypred)) ) / ypred.shape[0]
-                
-            #return deriv if derivative else cost
-            #https://deepnotes.io/softmax-crossentropy#derivative-of-cross-entropy-loss-with-softmax
-            #-0.5 / y.reshape(-1, 1).shape[0] * np.sum( np.log(ypred[np.arange(ypred.shape[0]), y.reshape(-1, 1).flatten()]) )
+        if self.weights is None :
+            if inputs is None :
+                if self.inputs is None :
+                    raise ValueError("Please specify the number of inputs = number of features")
+                inputs = self.inputs
+            else:
+                self.inputs = inputs 
+            
+            print( "Adding input layer with " + str(neurons) + " neurons, using " + str(activations))
+            W = self.initializeWeight(inputs, neurons, activations)
+            b = np.zeros(shape=(neurons, 1))
+            f = Activation(function=activations, alpha=alpha)
 
-        if self.regularization == 'l2':
-            for key in list(self.Weights.keys()):
-                cost += self.lamda / 2 * np.sum(self.Weights[key]**2)
+            self.weights = [W]
+            self.biases  = [b]
+            self.act     = [f]
+            
+        elif output == True :
+            if outputs is None :
+                if self.outputs is None :
+                    raise ValueError("Please specify the number of outputs = number of classes to be predicted, or 1 for Regression." )
+                else :
+                    outputs = self.outputs
+            else :
+                if self.outputs != outputs :
+                    warnings.warn( "The number of outputs was earlier set to " + str(self.outputs) + ", but the value specified in method addLayer of " + str(outputs) + " replaces this.")
+                    self.outputs = outputs
 
-        elif self.regularization == 'l1':
-            for key in list(self.Weights.keys()):
-                cost += self.lamda / 2 * np.sum(np.abs(self.Weights[key]))
-        
-        return cost
+            print(  "Adding output layer with " + str(outputs) + " outputs and "  + str(activations))
+            
+            previousLayerNeurons = self.weights[-1].shape[1]
+            W = self.initializeWeight(previousLayerNeurons, outputs, activations)
+            b = np.zeros(shape=(outputs, 1))
+            f = Activation(function = activations, alpha = alpha)
+            
+            self.weights.append(W)
+            self.biases .append(b)
+            self.act    .append(f)
+        else :
+            print("Adding layer with " + str(neurons) + " neurons using " + str(activations))
+            previousLayerNeurons = self.weights[-1].shape[1]
+            W = self.initializeWeight(previousLayerNeurons, neurons, activations)
+            b = np.zeros(shape=(neurons,1))
+            f = Activation(function = activations, alpha = alpha)
+
+            self.weights.append(W)
+            self.biases .append(b)
+            self.act    .append(f)
 
 
-    def accuracy(self, y, ypred):
+    def layer(self, x, i) :
         """
-        calculates the accuracy = number of correctly classified classes
-        INPUT:
-        --------
-        y: numpy ndarray
-            correct labels
-        ypred: numpy ndarray
-            predicted targets
+        Training the neural network by utilizing forward and backward propagation
 
-        OUTPUT:
-        ---------
-        returns the calculated accuracy
-        """
-        return (np.array(ypred) == np.array(y)).all(axis=0).mean()
-
-
-    def feed_forward(self, x, isTraining = True):
-        """
-        Calculating the feed forward pass of the neural network
         INPUT:
         --------
         x: numpy.ndarray
-            Data given to train our network
-        isTraining: boolean
-            Flag to state whether we are in training or not
-        
-        OUTPUT:
-        --------
-        a: numpy.ndarray
-            output after forwardpass (activation(W*x + b) )
+            Entire data on which the model should be fitted, will be splitted in Train and Validation set.
+        i: int
+            corresponding layer number
+
+        OUTPUT: 
+        ---------
+            returns the result from the next (hidden) layer
         """
-        # input
-        self.A['A0'] = x
-        for i in range(self.nLayers):
-            z = np.dot( self.A['A'+str(i)], self.Weights['W'+str(i+1)] ) + self.Biases['B'+str(i+1)]
-            a = self.activation_function(z, self.activations[i])
-            self.A['A'+str(i+1)] = a
+        # i = layer_number
 
-        # if self.cost_func == 'cross_entropy':
-        #     a = self.softmax(a)
+        W = self.weights[i]
+        b = self.biases[i]
+        f = self.act[i]
+        self.a[i+1] = f(np.dot(W.T, x) + b)
 
-        if isTraining:
-            self.output = a
-        else:
-            #print("OUTPUT: {}".format(a))
-            #print(np.unique(a, return_counts=True))
-            probs = self.softmax(a)
-            print(probs[:10])
-            return np.argmax(probs, axis=1)
+        return self.a[i+1]
 
+    def __call__(self, x) :
+        return self.network(x)
 
-    def backpropagation(self, yTrue=None):
+    def predict(self, x):
+        return self.network(x)
+
+    def forward_pass(self, x) :
+        return self.network(x)
+
+    def network(self, x):
         """
-        doing the funny backpropagation
+        This function performs the feed forward pass
+
         INPUT:
         --------
-        yTrue: numpy ndarray
-            Correct values of the targets y
+        x: numpy.ndarray
+            data to be propagated through the network
+
+        OUTPUT: 
+        ---------
+        x: numpy.ndarray
+            Output value calculated through the forward propagation of the network
         """
-        if yTrue is None:
-            yTrue = self.yTrain
+        ## First Feedforward to set up the proper length of the hidden layer outputs
+        if self.first_feedforward :
+            self.a = [None]*(len(self.weights)+1)
+            self.first_feedforward = False
 
-        # work the way from back to front, start at the output now
-        for i in range(self.nLayers, 0, -1): # reverse range
-            if i == self.nLayers:
-                deltaCost = self.cost_function(yTrue, self.output, derivative=False)
-                deltaCost = deltaCost.values.reshape(-1, self.nodes[len(self.nodes) -1])
-                # delta.shape = (BatchSize, lastNode)
-            else:
-                #print(c.shape, self.Weights['W'+str(i+1)].shape)
-                try:
-                    deltaCost = np.dot(deltaCost, self.Weights['W'+str(i+1)].T)
-                except: 
-                    deltaCost = np.dot(deltaCost, self.Weights['W'+str(i+1)])
-                deltaCost = deltaCost * self.activation_function(self.A['A'+str(i)], self.activations[i-1], derivative=True)
+        self.n_features, self.n_samples = x.shape
+        ## First layer
+        self.a[0] = x
+        self.a[1] = self.act[0](np.dot(self.weights[0].T, x) + self.biases[0])
+        x = self.a[1]
 
-            grad_w = np.dot(self.A['A'+str(i-1)].T, deltaCost)
-            grad_b = np.sum(deltaCost, axis= 0)
+        ## All the other ones
+        for i in range(1, len(self.weights)) :
+            x = self.layer(x, i)
+        return x
 
-            self.Weights_grad['dW'+str(i)] = grad_w
-            self.Biases_grad['dB'+str(i)] = grad_b
+    def cost_function(self, ypred, y, cost_function='cross_entropy', derivative=False):
+        '''
+        Training the neural network by utilizing forward and backward propagation
 
-            if self.regularization == 'l2':
-                self.Weights['W'+str(i)] -= self.eta * (grad_w + self.lamda * self.Weights['W'+str(i)])
+        INPUT:
+        --------
+        ypred: numpy.ndarray
+            predicted Outcome from the feed forward pass
+        y: numpy.ndarray
+            actual label and ground truth from data
+        cost_function: string
+            stating the name of the cost function to be used of ['mse', 'cross_entropy'], default is 'cross_entropy'
+        derivative: boolean
+            flag of whether we want the derivative of the respective cost function or not, default is False
+        OUTPUT: 
+        ---------
+            returns the calculated cost function or derivative respectively
+        '''
+        if cost_function == 'cross_entropy':
+            return (ypred - y) if derivative else -np.sum( y * np.log(ypred) + (1-y) * np.log(1-ypred) ) / ypred.shape[0]
 
-            elif self.regularization == 'l1':
-                self.Weights['W'+str(i)] -= self.eta * (grad_w + self.lamda * np.sign(self.Weights['W'+str(i)]))
+        elif cost_function == 'mse':
+            return (ypred - y) if derivative else ( (ypred - y)**2 ).mean() * 0.5
 
-            else: # update step
-                try:
-                    self.Weights['W'+str(i)] -= (self.eta * grad_w).reshape(-1, 1)
-                except:
-                    self.Weights['W'+str(i)] -= (self.eta * grad_w)
-
-            self.Biases['B'+str(i)] -= self.eta * grad_b
+        else:
+            raise ValueError("Please choose among ['cross_entropy', 'mse'] as a cost function.")
 
 
-    def trainingNetwork(self, epochs=1000, batchSize=200, tau=0.001, n_print=100):
+    def backpropagation(self, y, target) :
+        """
+        Performs the Backproagation through the network
+
+        INPUT:
+        --------
+        y: numpy.ndarray
+            predicted outcome of our network in the forward pass
+        target: numpy.ndarray
+            actual target from the data
+
+        OUTPUT: 
+        ---------
+            stores the gradients in the member variables
+        """
+
+        ## First Backprop
+        if self.first_backprop :
+            self.delta      = [None]*len(self.weights)
+            self.d_weights  = copy.deepcopy(self.weights)
+            self.d_biases   = copy.deepcopy(self.biases)
+            self.first_backprop = False
+
+        self.delta[-1]      = ( self.cost_function(y, target, cost_function=self.cost_fct_name, derivative=True) * self.act[-1].derivative(self.a[-1].T) )
+        self.d_weights[-1]  = np.dot(self.a[-2], self.delta[-1]) / self.n_samples
+        self.d_biases[-1]   = np.mean(self.delta[-1], axis = 0, keepdims = True).T
+        
+        ## Backpropagate through the other layers
+        for i in range(2, len(self.weights)+1) :
+            self.delta[-i]      = ( np.dot(self.delta[-i+1], self.weights[-i+1].T) * self.act[-i].derivative(self.a[-i].T) )
+            self.d_weights[-i]  = np.dot(self.a[-i-1], self.delta[-i]) / self.n_samples
+            self.d_biases[-i]   = np.mean(self.delta[-i], axis = 0, keepdims = True).T
+
+        ## Update the lovely, magical gradients of the respective weights
+        for i, dw in enumerate(self.d_weights) :
+            self.d_weights[i] = dw + self.lmbda * self.weights[i]
+
+    def train_network(self, x, target, learning_rate=0.001, epochs=200, batch_size=200, val_size=0.1, val_stepwidth=10, optimizer='sgd', lmbda=None):
         """
         Training the neural network by utilizing forward and backward propagation
+
         INPUT:
         --------
+        x: numpy.ndarray
+            Entire data on which the model should be train_networkted, will be splitted in Train and Validation set.
+        target: numpy.ndarray
+            corresponding targets (y-values) for each of the inputs
+        learning_rate: float
+            learning rate size, default is 0.001
         epochs: int
-            number of epochs to do
-        batchSize: int
+            number of epochs to train ( 1 epoch = 1 entire run of all batches), default are 200
+        batch_size: int
             size of the batches -> one epoch = len(Data) / batchSize
-        tau: float or string
-            learning rate type and potentially the normal learning rate
-        n_print: int
-            stepsize of when to calculate the errors and print them
+        val_size: float
+            validation size of the training data, default is 0.1 which corresponds to 10% of the entire data
+        val_stepwidth: int
+            stepwidth of when the accuracy shall be calculated on validation set, default is after every 10th step
+        optimizer: string
+            describes the optimizer to be used of ['adam', 'sgd'], default is 'sgd'
+        lmbda: float
+            regularization parameter for the L2 regularization in the loss term, default is None
+
+        OUTPUT: 
+        ---------
+            stores the results in the member variables
         """
+        self.lmbda = lmbda if lmbda is not None else self.lmbda
 
-        if tau == 'schedule':
-            t0 = 5 ; t1 = 50
-            eta = lambda t : t0/(t + t1)
-        else:
-            eta = lambda t : tau
+        self.learning_rate = learning_rate
+        self.best_loss  = None
+        self.bestEpoch  = None
+        self.best_param = None
 
-        num_batch_per_epoch = int(self.nTrain // batchSize)
+        ## Set up the optimizer
+        if optimizer == 'adam' :
+            self.initializeAdam()
+            self.optimizer = self.adam
+        elif optimizer == 'sgd' :
+            self.optimizer = self.sgd
+        else :
+            raise ValueError("The optimizer " + str(optimizer) + " is not supported. Please use either one of ['adam', 'sgd']")
 
-        self.convergence_rate = {'Epoch': [], 'Test Accuracy': []}
-        for epoch in range(epochs +1):
-            indices = np.random.choice(self.nTrain, self.nTrain, replace=False)
+        self.n_features, self.n_samples = x.shape
+        x, target = sklearn.utils.shuffle(x.T, target.T, n_samples = self.n_samples)
+        x = x.T
+        target = target.T
 
-            for batch in range(num_batch_per_epoch):
-                self.eta = eta(epoch * num_batch_per_epoch + batch)
-                # get the batches 
-                batch = indices[batch * batchSize : (batch+1)*batchSize]
-                # somehow running into index errors always ...
-                #self.yTrain.set_index(np.arange(self.yTrain.shape[0]), inplace=True)
-                #self.xTrain.set_index(np.arange(self.xTrain.shape[0]), inplace=True)
+        if not (self.n_features == self.inputs) :
+            raise ValueError("Features in input data doesn't match the network!")
 
-                #print(self.yTrain.index)
+        ## Train test split of SKLearn can also be used here to reduce some more lines of code
+        self.n_val              = int(round(val_size*self.n_samples))
+        self.X_val              = x.values[:, : self.n_val]
+        if target.ndim == 1:
+            target = target.reshape((1, -1))
+        self.target_validation  = target[:, : self.n_val ]
+        self.X_train            = x.values[:, self.n_val + 1 : ]
+        self.target_train       = target[:, self.n_val + 1 : ]
 
-                yBatch = self.yTrain.iloc[batch]
-                xBatch = self.xTrain.iloc[batch]
+        self.batch_size = min(batch_size, self.n_samples - self.n_val) 
+        if batch_size > self.batch_size :
+            warning_string = ("The specified batch_size of " + str(batch_size) + " is larger than the available data set size of " + str(self.n_samples-self.n_val))
+            warnings.warn(warning_string)
 
-                # propagate them through the network twice (forward and backward)
-                self.feed_forward(xBatch)
-                self.backpropagation(yBatch)
+        validation_iteration        = 0
+        self.validation_loss = np.zeros(int(ceil(epochs / val_stepwidth))+1)
+        self.training_loss   = np.zeros(epochs)
 
-                #self.learning_rate.append(self.eta)
+        self.validation_loss_improving = np.zeros_like(self.validation_loss)
+        self.validation_loss_improving *= np.nan
 
-            if epoch == 0 or epoch % n_print == 0:
-                ypred_train = self.feed_forward(self.xTrain, isTraining=False)
-                ypred_test  = self.feed_forward(self.xTest, isTraining=False)
-                trainError  = self.cost_function(self.yTrain, ypred_train)
-                testError   = self.cost_function(self.yTest, ypred_test)
-                #print("[ERROR]: {} epoch from {}: Training Error:  {}, Test Error  {}".format(epoch, epochs+1, trainError, testError))
-
-                if self.cost_func == 'cross_entropy':
-                    trainAcc = self.accuracy(self.yTrain, ypred_train)
-                    testAcc = self.accuracy(self.yTest, ypred_test)
-                    #print("[ACCURACY]: {} epoch from {}: Training Acc:  {}, Test Acc  {}".format(epoch, epochs, trainAcc, testAcc))
-                    self.convergence_rate['Epoch'].append(epoch)
-                    self.convergence_rate['Test Accuracy'].append(testAcc)
-
-## TESTING MY BABY 
-if __name__ == '__main__':
-    # read the dataset
-    cwd = os.path.join(os.getcwd(), "data")
-    filename = "default of credit card clients.xls"
-    filePath = os.path.join(cwd, filename)
-    X, y = get_data(filePath, standardized=False, normalized=False)
-    # note that the activation functions need to be 1 smaller than the node length
-    activation_functions    = ['relu', 'relu', 'relu', 'tanh', None]
-    neural_setup            = [23, 128, 64, 32, 32, 1] # first needs to be 23 and last needs to be 1
-    neuralNet = NeuralNet(X, y, nodes=neural_setup, activations=activation_functions, cost_function='cross_entropy')
-    neuralNet.split_data(test_size=0.2)
-    neuralNet.trainingNetwork(epochs=4, batchSize=64, tau=0.001)
-
-    ypred_test = neuralNet.feed_forward(neuralNet.xTest, isTraining=False)
-    acc = neuralNet.accuracy(neuralNet.yTest, ypred_test)
-    print("My      Accuracy: {}".format(acc))
-
-    print(np.unique(ypred_test, return_counts=True))
-    #print(neuralNet.yTest)
-
-    #print(neuralNet.Weights['W1'], neuralNet.Weights['W3'])
-    #print(neuralNet.Biases['B1'], neuralNet.Biases['B3'])
-
-    #clf = MLPClassifier(hidden_layer_sizes=neural_setup, learning_rate_init=0.01).fit(neuralNet.xTrain, neuralNet.yTrain)
-    #print("SKLearn Accuracy: {}".format(clf.score(neuralNet.xTest, neuralNet.yTest)))
-
-
-
-
-
-
-
-
-## ------------------------------ OTHER CODE TO CHECK
-'''
-    def feed_forward(self):
-        self.z1 = np.matmul(self.X_data, self.hidden_weights) + self.hidden_bias
-        self.a1 = sigmoid(self.z1)
-
-        self.z2 = np.matmul(self.a1, self.output_weights) + self.output_bias
-
-        exp_term = np.exp(self.z2)
-        self.probabilities = exp_term / np.sum(exp_term, axis=1, keepdims=True)
-
-    def feed_forward_out(self, X):
-        z1 = np.matmul(X, self.hidden_weights) + self.hidden_bias
-        a1 = sigmoid(z1)
-
-        z2 = np.matmul(a1, self.output_weights) + self.output_bias
+        self.batches_per_epoch = int(ceil(self.X_train.shape[1] / self.batch_size))
         
-        exp_term = np.exp(z2)
-        probabilities = exp_term / np.sum(exp_term, axis=1, keepdims=True)
-        return probabilities
+        start_time = time.time()
 
-    def backpropagation(self):
-        error_output = self.probabilities - self.Y_data
-        error_hidden = np.matmul(error_output, self.output_weights.T) * self.a1 * (1 - self.a1)
+        for epoch in range(epochs) :    
+            epoch_start_time   = time.time()
+            epoch_loss = 0
 
-        self.output_weights_gradient = np.matmul(self.a1.T, error_output)
-        self.output_bias_gradient = np.sum(error_output, axis=0)
+            ## Let the magic begin with training on Mini Batches
+            for batch in range(self.batches_per_epoch) :
+                batch_start_time = time.time()
+                x_batch, target_batch   = sklearn.utils.shuffle(self.X_train.T, self.target_train.T, n_samples=self.batch_size)
+                
+                y_batch = self.forward_pass(x_batch.T)
+                self.backpropagation(y_batch.T, target_batch)
+                batch_loss = self.cost_function(y_batch.T, target_batch, cost_function=self.cost_fct_name)
 
-        self.hidden_weights_gradient = np.matmul(self.X_data.T, error_hidden)
-        self.hidden_bias_gradient = np.sum(error_hidden, axis=0)
+                ## Add L2 regularization to the loss
+                reg_loss = np.sum(np.array([np.dot(s.ravel(), s.ravel()) for s in self.weights])) * 0.5 * self.lmbda / self.batch_size
+                batch_loss += reg_loss
+                epoch_loss += batch_loss
 
-        if self.lmbd > 0.0:
-            self.output_weights_gradient += self.lmbd * self.output_weights
-            self.hidden_weights_gradient += self.lmbd * self.hidden_weights
+                self.optimizer()
+            
+            self.training_loss[epoch] = epoch_loss
+            epoch_time                = time.time() - epoch_start_time
+            print("Epoch: {} of {}, took: {:.3f}s".format(epoch, epochs, epoch_time))
 
-        self.output_weights -= self.eta * self.output_weights_gradient
-        self.output_bias -= self.eta * self.output_bias_gradient
-        self.hidden_weights -= self.eta * self.hidden_weights_gradient
-        self.hidden_bias -= self.eta * self.hidden_bias_gradient
+            ## Test against the validation set after each val_stepwidth
+            if epoch % val_stepwidth == 0 or (epoch == epochs-1):
+                y_validation = self.forward_pass(self.X_val)
+                self.validation_loss[validation_iteration] = self.cost_function(y_validation.T, self.target_validation.T, cost_function=self.cost_fct_name)
 
-    def predict(self, X):
-        probabilities = self.feed_forward_out(X)
-        return np.argmax(probabilities, axis=1)
+                ## Add L2 regularization to the loss - make it more stable
+                reg_loss = np.sum(np.array([np.dot(s.ravel(), s.ravel()) for s in self.weights])) * 0.5 * self.lmbda / self.batch_size
+                self.validation_loss[validation_iteration] += reg_loss
 
-    def predict_probabilities(self, X):
-        probabilities = self.feed_forward_out(X)
-        return probabilities
+                self.loss = self.validation_loss[validation_iteration]
+                self.validation_loss_improving[validation_iteration] = self.best_loss
 
-    def train(self):
-        data_indices = np.arange(self.n_inputs)
+                if (self.best_loss is None) or (self.best_loss > self.validation_loss[validation_iteration]) :
+                    self.best_loss  = self.validation_loss[validation_iteration]
+                    self.best_param = [ params for params in (self.weights + self.biases) ]
+                    self.bestEpoch  = epoch
+                    self.validation_loss_improving[validation_iteration] = self.validation_loss[validation_iteration]
+                    pickle.dump(self, open('nn.p', 'wb'))
 
-        for i in range(self.epochs):
-            for j in range(self.iterations):
-                chosen_datapoints = np.random.choice(
-                    data_indices, size=self.batch_size, replace=False
-                )
+                validation_iteration += 1
 
-                self.X_data = self.X_data_full[chosen_datapoints]
-                self.Y_data = self.Y_data_full[chosen_datapoints]
+        self.validation_loss_improving[-1] = self.best_loss
 
-                self.feed_forward()
-                self.backpropagation()
-'''
+        ## Set the weights and Biases to the best ones found (= lowest val error)
+        self.weights = [w for w in self.best_param[:len(self.weights)]]
+        self.biases  = [b for b in self.best_param[len(self.weights):]]
+         
+
+    def sgd(self) :
+        '''
+        This function does the stochastic gradient descent (SGD) and updates the weights and biases respectively
+        '''
+        ## do the update of the Weights and Biases
+        for i, d_w in enumerate(self.d_weights) :
+            self.weights[i] -= self.learning_rate * d_w
+
+        for i, d_b in enumerate(self.d_biases) :
+            self.biases[i]  -= self.learning_rate * d_b
+
+
+    def initializeAdam(self) :
+        '''
+        This function Initialized the Adam optimizer which is State of the Art
+        '''
+        if not self.adam_initialized :
+            self.t = 0
+            self.learning_rate_init = self.learning_rate
+            self.param = self.weights + self.biases
+            
+            ## First moment estimates
+            self.m = [np.zeros_like(p) for p in self.param]
+            # Corrected First moment estimates
+            self.mh = [np.zeros_like(p) for p in self.param]
+        
+            ## Second moment estimates
+            self.v = [np.zeros_like(p) for p in self.param]
+            # Corrected second moment estimates
+            self.vh = [np.zeros_like(p) for p in self.param]
+            self.adam_initialized = True
+
+    def adam(self) :
+        '''
+        This function implements Adam with the momentum terms
+        along with the values proposed in the literature (https://arxiv.org/pdf/1412.6980.pdf)
+        '''
+        ## declare the parameter terms
+        beta1   = 0.9
+        beta2   = 0.999
+        epsilon = 1e-8
+        self.t += 1
+        t       = self.t
+
+        ## Gradients
+        self.grad = self.d_weights + self.d_biases
+
+        ## m and v term 
+        self.m = [beta1 * m + (1 - beta1) * g    for m,g in zip(self.m, self.grad)]
+
+        self.v = [beta2 * v + (1 - beta2) * g**2 for v,g in zip(self.v, self.grad)]
+
+        # adaptive learning rate
+        self.learning_rate = self.learning_rate_init * np.sqrt(1 - beta2**t) / (1 - beta1**t)
+
+        change = [- self.learning_rate * m / (np.sqrt(v) + epsilon) for m,v in zip(self.m, self.v)]
+        self.change = change
+
+        ## Update step
+        self.weights = [w + dw for w, dw in zip(self.weights, change[:len(self.weights)])]
+        self.biases  = [b + db for b, db in zip(self.biases,  change[len(self.weights):])]
+
+
+#################### TESTING THIS GORGEOUS BEAUTY #################
+from sklearn.model_selection import train_test_split
+from LogisticRegression import get_data # my library
+
+if __name__ == "__main__":
+    # read the data
+    filePath = os.path.join(os.path.join(os.getcwd(), 'data'), "default of credit card clients.xls")
+    X, y = get_data(filePath, standardized=True, normalized=False)
+    n_classes = 2
+    epochs = 10
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=2912)
+
+    nn = NeuralNetwork(inputs           = X_train.shape[1],
+                       outputs          = n_classes,
+                       cost_function_name    = 'cross_entropy')
+    nn.addLayer(activations = 'relu', neurons = 128)
+    nn.addLayer(activations = 'relu', neurons = 128)
+    nn.addLayer(activations = 'relu', neurons = 128)
+    nn.addLayer(activations = 'relu', neurons = 64)
+    nn.addLayer(activations = 'softmax', neurons = n_classes, output = True)
+    
+    nn.train_network(X_train.T,
+           y_train.T,
+           batch_size           = 64,
+           learning_rate        = 0.0001,
+           epochs               = epochs,
+           val_size             = 0.2,
+           val_stepwidth        = 10,
+           optimizer            = 'adam',
+           lmbda                = 0.0)
+
+    y_validation = nn.predict(X_test.T)
+    y_validation = np.argmax(y_validation, axis=0)
+    print(np.unique(np.array(y_validation), return_counts=True))
+    acc = np.sum(y_test.astype(int) == y_validation.astype(int)) / len(y_test)
+
+    print("Accuracy: ", acc)
