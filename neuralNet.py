@@ -482,6 +482,30 @@ class NeuralNetwork :
         self.weights = [w + dw for w, dw in zip(self.weights, change[:len(self.weights)])]
         self.biases  = [b + db for b, db in zip(self.biases,  change[len(self.weights):])]
 
+    def accuracy(self, X, y):
+        '''
+        this function calculates the accuracy score (sums correctly classified samples and divides it by length)
+        INPUT: 
+        -------
+        X : numpy ndarray
+            the sample(s) to be predicted in the network
+        y: numpy.ndarray
+            the corresponding ground truth labels
+
+        OUTPUT: 
+        ---------
+            returns the accuracy score
+        '''
+        y_pred = nn.predict(X.T) # feed forward pass
+        y_pred = np.argmax(y_pred, axis=0) # get the higher probability label
+
+        ## check for the predictions
+        values, count = np.unique(y_pred, return_counts=True)
+        if len(values) == 1: # only one label predicted
+            print("There was always the label: {} predicted".format(values[0]))
+        
+        return np.sum(y.astype(int) == y_pred.astype(int)) / len(y)
+
 
 #################### TESTING THIS GORGEOUS BEAUTY #################
 from sklearn.model_selection import train_test_split
@@ -513,10 +537,5 @@ if __name__ == "__main__":
            val_stepwidth        = 10,
            optimizer            = 'adam',
            lmbda                = 0.0)
-
-    y_validation = nn.predict(X_test.T)
-    y_validation = np.argmax(y_validation, axis=0)
-    print(np.unique(np.array(y_validation), return_counts=True))
-    acc = np.sum(y_test.astype(int) == y_validation.astype(int)) / len(y_test)
-
-    print("Accuracy: ", acc)
+    
+    print("Accuracy: {}".format(nn.accuracy(X_test, y_test)) )
