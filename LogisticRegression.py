@@ -4,6 +4,9 @@ import matplotlib.pylab as plt
 import pandas as pd
 import numpy as np
 import os
+from sklearn.preprocessing import OneHotEncoder
+encoder = OneHotEncoder()
+
 
 plot_dir = os.path.join(os.getcwd(), 'plots\\')
 
@@ -149,12 +152,12 @@ def get_data(pathToFile, standardized=True, normalized=False):
         plt.legend()
         plt.show()
 
-## Logistic Regression Class Implementation with Stochastic Gradient Descent
+## Logistic Regression Class Implementation with Stochastic Gradient Descent #############
 class LogisticRegression():
     def __init__(self, X, y, test_size=0.2):
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(X, y, test_size=test_size, random_state=2912)
         # Initialize parameter beta
-        self.beta    = np.random.uniform(-0.5,0.5, self.X_train.shape[1])
+        self.beta  = np.random.uniform(-0.5,0.5, self.X_train.shape[1])
         self.beta /= np.linalg.norm(self.beta)
 
         self.train_accuracy = []
@@ -195,6 +198,7 @@ class LogisticRegression():
         else:
             learning_schedule = lambda t : eta
 
+        ## Add the regularization terms to the cost function.
         if regularization == 'l2':
             reg_cost = lambda beta: lamda * np.sum(self.beta**2)
             reg_grad = lambda beta: 2 * lamda * self.beta
@@ -205,12 +209,12 @@ class LogisticRegression():
             reg_cost = lambda beta: 0
             reg_grad = lambda beta: 0
 
-        #Stochastic Gradient Descent (SGD)
+        ## Stochastic Gradient Descent (SGD)
         for epoch in range(epochs + 1):
 
-            # Shuffle training data
+            ## Shuffle training data
             #self.X_train.set_index(np.arange(self.X_train.shape[0]), inplace=True)
-            try:
+            try: ## sometimes run into index error problems
                 X_train = self.X_train.iloc[ np.random.permutation(self.X_train.shape[0]) ]
                 y_train = self.y_train.iloc[ np.random.permutation(self.y_train.shape[0]) ]
             except: 
@@ -218,33 +222,33 @@ class LogisticRegression():
                 y_train = self.y_train[ np.random.permutation(self.y_train.shape[0]) ]                
 
             for i in range(iterPerEpoch):
-                # create the batches
+                ## create the batches
                 rand_idx = np.random.randint(iterPerEpoch)
                 xBatch = X_train[rand_idx * self.batchSize : (rand_idx+1) * self.batchSize]
                 yBatch = y_train[rand_idx * self.batchSize : (rand_idx+1) * self.batchSize]
 
-                y = np.dot(xBatch, self.beta) # somehow xBatch @ beta does not work ?!
-                # logisitc probability 
-                p = 1.0/(1 + np.exp(-y))
+                y = np.dot(xBatch, self.beta) # somehow 'xBatch @ beta' does not work ?!
+                ## logisitc probability 
+                p = 1.0 / (1 + np.exp(-y))
                 eta = learning_schedule( (epoch*iterPerEpoch) + i)
 
-                # update step for the parameter
+                ## update step for the parameter
                 gradient   = -np.dot(xBatch.T, (yBatch - p)) / xBatch.shape[0] + reg_grad(self.beta) #scale + Lambda*beta/scale
                 self.beta -= eta * gradient
 
             if (epoch % 10 == 0): # calculate accuracy after every 10th epoch
                 logit_train = np.dot(X_train, self.beta)
-                # binary cross entropy loss: 
+                ## binary cross entropy loss: 
                 self.train_cost = 0.5*(-np.sum( (y_train * logit_train) - np.log(1 + np.exp(logit_train)) )) / X_train.shape[0] + reg_cost(self.beta)
                 self.p_train = 1 / (1 + np.exp(-logit_train))
-                # accuracy score
+                ## accuracy score
                 self.train_accuracy.append( np.sum((self.p_train > 0.5) == y_train)/X_train.shape[0] )
 
                 logit_test = np.dot(self.X_test, self.beta)
-                # binary cross entropy on test data
+                ## binary cross entropy on test data
                 self.test_cost = 0.5*(-np.sum((self.y_test * logit_test) - np.log(1 + np.exp(logit_test)))) / self.X_test.shape[0] + reg_cost(self.beta)
                 self.p_test = 1/(1 + np.exp(-logit_test))
-                # test accuracy score
+                ## test accuracy score
                 self.test_accuracy.append( np.sum((self.p_test > 0.5) == self.y_test) / self.X_test.shape[0] )
 
                 if plot_training:
@@ -259,8 +263,8 @@ class LogisticRegression():
                 break
 
         ## Benchmark it against Scikit Learn
-        #clf = linear_model.LogisticRegression(solver='lbfgs', C=lamda).fit(self.X_train, self.y_train)
-        #print("Scikit Accuracy on Test Set: {}".format(clf.score(self.X_test, self.y_test)))
+        clf = linear_model.LogisticRegression(solver='lbfgs', C=lamda).fit(self.X_train, self.y_train)
+        print("Scikit Accuracy on Test Set: {}".format(clf.score(self.X_test, self.y_test)))
         print("My     Accuracy on Test Set: {}, lambda: {}".format(self.test_accuracy[-1], lamda))
 
 
@@ -273,7 +277,7 @@ if __name__ == '__main__':
     batches = 64
     
     # read the dataset
-    cwd = os.getcwd()
+    path = os.path.join(os.path.join(os.getcwd(), 'data'), "default of credit card clients.xls")
     filename = "\\data\\default of credit card clients.xls"
     filePath = cwd + filename
     X, y = get_data(filePath, standardized=False, normalized=False)

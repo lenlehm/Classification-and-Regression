@@ -390,7 +390,7 @@ class NeuralNetwork :
             
             self.training_loss[epoch] = epoch_loss
             epoch_time                = time.time() - epoch_start_time
-            print("Epoch: {} of {}, took: {:.3f}s".format(epoch, epochs, epoch_time))
+            #print("Epoch: {} of {}, took: {:.3f}s".format(epoch, epochs, epoch_time))
 
             ## Test against the validation set after each val_stepwidth
             if epoch % val_stepwidth == 0 or (epoch == epochs-1):
