@@ -242,7 +242,7 @@ class LogisticRegression():
                 self.train_cost = 0.5*(-np.sum( (y_train * logit_train) - np.log(1 + np.exp(logit_train)) )) / X_train.shape[0] + reg_cost(self.beta)
                 self.p_train = 1 / (1 + np.exp(-logit_train))
                 ## accuracy score
-                self.train_accuracy.append( np.sum((self.p_train > 0.5) == y_train)/X_train.shape[0] )
+                self.train_accuracy.append( np.sum((self.p_train > 0.5) == y_train) / X_train.shape[0] )
 
                 logit_test = np.dot(self.X_test, self.beta)
                 ## binary cross entropy on test data
