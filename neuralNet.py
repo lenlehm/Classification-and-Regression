@@ -345,11 +345,16 @@ class NeuralNetwork :
 
         ## Train test split of SKLearn can also be used here to reduce some more lines of code
         self.n_val              = int(round(val_size*self.n_samples))
-        self.X_val              = x.values[:, : self.n_val]
+        try:
+            self.X_val              = x.values[:, : self.n_val]
+            self.X_train            = x.values[:, self.n_val + 1 : ]
+        except: 
+            self.X_val              = x[:, : self.n_val]
+            self.X_train            = x[:, self.n_val + 1 : ]
+
         if target.ndim == 1:
             target = target.reshape((1, -1))
         self.target_validation  = target[:, : self.n_val ]
-        self.X_train            = x.values[:, self.n_val + 1 : ]
         self.target_train       = target[:, self.n_val + 1 : ]
 
         self.batch_size = min(batch_size, self.n_samples - self.n_val) 
@@ -496,7 +501,7 @@ class NeuralNetwork :
         ---------
             returns the accuracy score
         '''
-        y_pred = nn.predict(X.T) # feed forward pass
+        y_pred = self.predict(X.T) # feed forward pass
         y_pred = np.argmax(y_pred, axis=0) # get the higher probability label
 
         ## check for the predictions
@@ -537,5 +542,5 @@ if __name__ == "__main__":
            val_stepwidth        = 10,
            optimizer            = 'adam',
            lmbda                = 0.0)
-    
+
     print("Accuracy: {}".format(nn.accuracy(X_test, y_test)) )
