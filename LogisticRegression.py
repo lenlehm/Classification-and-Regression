@@ -1,12 +1,10 @@
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import r2_score
 from sklearn import linear_model
 import matplotlib.pylab as plt
 import pandas as pd
 import numpy as np
 import os
-from sklearn.preprocessing import OneHotEncoder
-encoder = OneHotEncoder()
-
 
 plot_dir = os.path.join(os.getcwd(), 'plots\\')
 
@@ -87,70 +85,6 @@ def get_data(pathToFile, standardized=True, normalized=False):
     X.set_index(pd.Series(np.arange(len(df[features]))), inplace=True)
     return X, y
 
-    def gain_chart(self, threshold = 0.5, plot = True):
-        """
-        Creates a gains chart for the predicted y-values
-        when classifying a binary variable. Predicted y-values
-        are given as a percent confidence of which class it
-        belongs to. The percent over the given threshold is
-        predicted as class 1 and everything under is given
-        as class 2.
-        INPUT:
-        --------
-        threshold: float
-            number in the interval between [0, .., 1] = threshold among the classes
-        plot: boolean
-            flag of whether to plot or not
-        OUTPUT:
-        ----------
-        ratio: float
-            returns the ratio
-        """
-        y = self.y
-        ypred = self.ypred
-
-        num1 = np.sum(y)
-        frac1 = num1/y.shape[0]
-        sort = np.argsort(ypred[:, -1])
-        lab_sort = y[sort[::-1]]
-
-        fracs = np.arange(0, 1.01, 0.01)
-        gains = np.zeros(len(fracs))
-
-        for i in range(len(fracs)):
-            lab_frac = lab_sort[:int(fracs[i]*y.shape[0])]
-            gains[i] = np.sum(lab_frac)/num1
-
-        def best(x):
-            if x < frac1:
-                return x/frac1
-            else:
-                return 1
-
-        besty = np.zeros_like(fracs)
-        for i in range(len(besty)):
-            besty[i] = best(fracs[i])
-
-        area_best = np.trapz(besty - fracs, fracs)
-        area_model = np.trapz(gains - fracs, fracs)
-        ratio = area_model/area_best
-        self.gain_params = [fracs, gains, besty]
-        self.gain_dict = {'fracs': fracs, 'gains':gains, 'besty':besty, 'ratio':ratio}
-        self.ratio = ratio
-        if plot:
-            self.plot_gains(*self.gain_params)
-        return ratio
-
-    def plot_gains(self, fracs, gains, besty, ratio):
-        plt.plot(fracs, gains, label='Lift Curve')
-        plt.plot(fracs, fracs, '--', label='Baseline')
-        plt.plot(fracs, besty, '--', label='Best Curve')
-        plt.plot([], [], ' ', label='Area ratio: %.4f' % ratio)
-        plt.xlabel('Fraction of total data', fontsize=14)
-        plt.ylabel('Cumulative number of target data', fontsize=14)
-        plt.grid(True)
-        plt.legend()
-        plt.show()
 
 ## Logistic Regression Class Implementation with Stochastic Gradient Descent #############
 class LogisticRegression():
@@ -250,6 +184,7 @@ class LogisticRegression():
                 self.p_test = 1/(1 + np.exp(-logit_test))
                 ## test accuracy score
                 self.test_accuracy.append( np.sum((self.p_test > 0.5) == self.y_test) / self.X_test.shape[0] )
+                self.R2 = r2_score(self.y_test, self.p_test )
 
                 if plot_training:
                     print("Epoch: {} out of {} epochs".format(epoch, epochs))
@@ -264,7 +199,7 @@ class LogisticRegression():
 
         ## Benchmark it against Scikit Learn
         clf = linear_model.LogisticRegression(solver='lbfgs', C=lamda).fit(self.X_train, self.y_train)
-        print("Scikit Accuracy on Test Set: {}".format(clf.score(self.X_test, self.y_test)))
+        print("Scikit Accuracy on Test Set: {}, lambda: {}".format(clf.score(self.X_test, self.y_test), lamda))
         print("My     Accuracy on Test Set: {}, lambda: {}".format(self.test_accuracy[-1], lamda))
 
 
@@ -279,8 +214,8 @@ if __name__ == '__main__':
     # read the dataset
     path = os.path.join(os.path.join(os.getcwd(), 'data'), "default of credit card clients.xls")
     filename = "\\data\\default of credit card clients.xls"
-    filePath = cwd + filename
-    X, y = get_data(filePath, standardized=False, normalized=False)
+    filePath = os.getcwd() + filename
+    X, y = get_data(path, standardized=False, normalized=False)
     logistic = LogisticRegression(X, y, test_size=0.2)
     logistic.optimize(batch_size=batches, regularization='l2', epochs=epochs, lamda=10)
 
@@ -289,7 +224,7 @@ if __name__ == '__main__':
     # name = 'Logistic Regression'
     # plot_accuracies(logistic.test_accuracy, text, name)
     
-    # check for different lambdas
-    lambdas = np.logspace(-4,4,9)
-    for lamda in lambdas:
-        logistic.optimize(batch_size=batches, regularization='l1', epochs=1000, lamda=lamda)
+    ## check for different lambdas
+    # lambdas = np.logspace(-4,4,9)
+    # for lamda in lambdas:
+    #     logistic.optimize(batch_size=batches, regularization='l1', epochs=1000, lamda=lamda)

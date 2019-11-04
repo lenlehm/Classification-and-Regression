@@ -1,5 +1,5 @@
+from sklearn.metrics import r2_score
 from Activation import Activation
-from sklearn import metrics
 from math import ceil
 import pandas as pd
 import numpy as np
@@ -462,7 +462,7 @@ class NeuralNetwork :
         This function implements Adam with the momentum terms
         along with the values proposed in the literature (https://arxiv.org/pdf/1412.6980.pdf)
         '''
-        ## declare the parameter terms
+        ## declare the parameters with the literature values
         beta1   = 0.9
         beta2   = 0.999
         epsilon = 1e-8
@@ -508,6 +508,8 @@ class NeuralNetwork :
         values, count = np.unique(y_pred, return_counts=True)
         if len(values) == 1: # only one label predicted
             print("There was always the label: {} predicted".format(values[0]))
+
+        self.R2 = r2_score(y, y_pred)
         
         return np.sum(y.astype(int) == y_pred.astype(int)) / len(y)
 
