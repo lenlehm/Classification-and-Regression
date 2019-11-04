@@ -1,5 +1,4 @@
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import r2_score
 from sklearn import linear_model
 import matplotlib.pylab as plt
 import pandas as pd
@@ -184,7 +183,7 @@ class LogisticRegression():
                 self.p_test = 1/(1 + np.exp(-logit_test))
                 ## test accuracy score
                 self.test_accuracy.append( np.sum((self.p_test > 0.5) == self.y_test) / self.X_test.shape[0] )
-                self.R2 = r2_score(self.y_test, self.p_test )
+                #self.R2 = r2_score(self.y_test, self.p_test )
 
                 if plot_training:
                     print("Epoch: {} out of {} epochs".format(epoch, epochs))
@@ -199,8 +198,8 @@ class LogisticRegression():
 
         ## Benchmark it against Scikit Learn
         clf = linear_model.LogisticRegression(solver='lbfgs', C=lamda).fit(self.X_train, self.y_train)
-        print("Scikit Accuracy on Test Set: {}, lambda: {}".format(clf.score(self.X_test, self.y_test), lamda))
-        print("My     Accuracy on Test Set: {}, lambda: {}".format(self.test_accuracy[-1], lamda))
+        print("Scikit Accuracy on Test Set: {:.3f}, lambda: {}".format(clf.score(self.X_test, self.y_test), lamda))
+        print("My     Accuracy on Test Set: {:.3f}, lambda: {}".format(self.test_accuracy[-1], lamda))
 
 
 # TEST THAT SHIT
